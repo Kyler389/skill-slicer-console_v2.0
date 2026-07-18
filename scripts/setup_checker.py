@@ -2,17 +2,30 @@
 """
 Check slicer-console skill prerequisites and guide the user through setup.
 
+Detects availability of all three execution methods:
+  1. Direct — Slicer --no-splash --python-script
+  2. PythonSlicer — headless interpreter
+  3. Jupyter — Jupyter kernel via jupyter_client
+
+Cross-platform: works on Windows, macOS, and Linux.
+
 Usage:
     python setup_checker.py
     python setup_checker.py --kernel slicer-5.6
+    python setup_checker.py --verbose    # show all detection strategies
+    python setup_checker.py --fix        # auto-install missing dependencies
 """
 
 import argparse
 import os
-import platform
-import shutil
-import subprocess
 import sys
+import subprocess
+
+
+# Import shared auto-detection module
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _SCRIPT_DIR)
+import slicer_detect
 
 
 def run_cmd(cmd):
@@ -21,11 +34,6 @@ def run_cmd(cmd):
         return result.returncode == 0, result.stdout, result.stderr
     except Exception as e:
         return False, "", str(e)
-
-
-def check_jupyter_cli():
-    ok, out, err = run_cmd("jupyter --version")
-    return ok
 
 
 def check_jupyter_client():
@@ -47,52 +55,6 @@ def find_kernelspec(kernel_name):
     return None
 
 
-def find_slicer_executable():
-    system = platform.system()
-    candidates = []
-    if system == "Windows":
-        candidates += [
-            r"D:\slicer\Slicer 5.6.1\Slicer.exe",
-            r"D:\slicer\Slicer 5.6.2\Slicer.exe",
-            r"C:\Program Files\Slicer 5.6.1\Slicer.exe",
-            r"C:\Program Files\Slicer 5.6.2\Slicer.exe",
-            r"C:\Program Files\Slicer\Slicer.exe",
-        ]
-    elif system == "Darwin":
-        candidates += [
-            "/Applications/Slicer.app/Contents/MacOS/Slicer",
-            "/Applications/Slicer-5.6.1.app/Contents/MacOS/Slicer",
-            "/Applications/Slicer-5.6.2.app/Contents/MacOS/Slicer",
-        ]
-    else:
-        candidates += [
-            "/opt/slicer/Slicer",
-            "/usr/local/bin/Slicer",
-            os.path.expanduser("~/Slicer/Slicer"),
-        ]
-
-    for c in candidates:
-        if os.path.isfile(c):
-            return c
-    return None
-
-
-def get_pythonslicer_path(slicer_exe):
-    if not slicer_exe:
-        return None
-    base = os.path.dirname(slicer_exe)
-    candidates = [
-        os.path.join(base, "bin", "PythonSlicer.exe"),
-        os.path.join(base, "..", "bin", "PythonSlicer.exe"),
-        os.path.join(base, "bin", "python-real"),
-        os.path.join(base, "..", "bin", "python-real"),
-    ]
-    for c in candidates:
-        if os.path.isfile(c):
-            return c
-    return None
-
-
 def print_result(name, ok, message=""):
     if ok:
         status = "[OK]"
@@ -100,7 +62,7 @@ def print_result(name, ok, message=""):
         status = "[FAIL]"
     print(f"  {status} {name}", end="")
     if message:
-        print(f" — {message}")
+        print(f" -- {message}")
     else:
         print()
 
@@ -108,55 +70,132 @@ def print_result(name, ok, message=""):
 def main():
     parser = argparse.ArgumentParser(description="Check slicer-console prerequisites")
     parser.add_argument("--kernel", default="slicer-5.6", help="Kernel name to check (default: slicer-5.6)")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Show all detection strategies")
+    parser.add_argument("--fix", action="store_true", help="Auto-install missing dependencies (pip install jupyter_client)")
     args = parser.parse_args()
+
+    system = slicer_detect.get_system()
+    slicer_name = slicer_detect.slicer_exe_name()
+    ps_name = slicer_detect.pythonslicer_exe_name()
 
     print("=" * 60)
     print("slicer-console Skill Setup Checker")
+    print(f"System: {system}")
     print("=" * 60)
 
-    # 1. jupyter CLI
-    has_jupyter = check_jupyter_cli()
-    print_result("jupyter CLI available", has_jupyter)
+    # ── Method 1: Direct Slicer.exe ──
+    print(f"\n--- Method 1: Direct {slicer_name} (--python-script) ---")
+    slicer_exe = slicer_detect.find_slicer(fast=not args.verbose)
+    print_result(f"Slicer executable ({slicer_name}) found", slicer_exe is not None, slicer_exe or "not found")
 
-    # 2. jupyter_client
+    if args.verbose:
+        print("\n  Detection strategy details:")
+        for name, result in slicer_detect.find_slicer_detailed():
+            status = result or "-"
+            print(f"    [{name}]: {status}")
+
+    # ── Method 2: PythonSlicer ──
+    print(f"\n--- Method 2: {ps_name} (Headless) ---")
+    pslicer = slicer_detect.find_pythonslicer(slicer_exe)
+    print_result(f"PythonSlicer ({ps_name}) found", pslicer is not None, pslicer or "not found")
+
+    # ── Method 3: Jupyter Kernel ──
+    print("\n--- Method 3: Jupyter Kernel (Fallback) ---")
     has_jc = check_jupyter_client()
     print_result("jupyter_client Python package", has_jc)
     if not has_jc:
         print("      Fix: pip install jupyter_client")
 
-    # 3. Kernel spec
     kernel_path = find_kernelspec(args.kernel)
     has_kernel = kernel_path is not None and os.path.isdir(kernel_path)
     print_result(f"Kernel spec '{args.kernel}' registered", has_kernel, kernel_path or "not found")
-    if not has_kernel:
-        print("      Fix: See 'Manual Setup' section in SKILL.md to install the SlicerJupyter kernel.")
 
-    # 4. Slicer executable
-    slicer_exe = find_slicer_executable()
-    print_result("Slicer executable found", slicer_exe is not None, slicer_exe or "not found in common paths")
-
-    # 5. PythonSlicer
-    pslicer = get_pythonslicer_path(slicer_exe)
-    print_result("PythonSlicer found", pslicer is not None, pslicer or "not found")
-
-    print("\n" + "=" * 60)
-    if has_jupyter and has_jc and has_kernel and slicer_exe and pslicer:
-        print("All checks passed! You are ready to use the slicer-console skill.")
+    # ── Quick setup hint ──
+    print("\n--- Quick Setup ---")
+    if not slicer_exe:
+        print("  Set SLICER_PATH env var to point to your Slicer executable.")
+        if system == "Windows":
+            print('    set SLICER_PATH="D:\\slicer\\3D Slicer 5.10.0\\Slicer.exe"')
+            print('  Or set SLICER_ROOT to the Slicer installation directory:')
+            print('    set SLICER_ROOT="D:\\slicer\\3D Slicer 5.10.0"')
+        elif system == "Darwin":
+            print('    export SLICER_PATH="/Applications/Slicer.app/Contents/MacOS/Slicer"')
+        else:
+            print('    export SLICER_PATH="/opt/slicer/Slicer"')
     else:
-        print("Some prerequisites are missing. Follow the fixes above.")
-        print("\nNext steps:")
-        print("  1. Open Slicer GUI")
-        print("  2. Install the 'SlicerJupyter' extension (View -> Extension Manager)")
-        print("  3. Restart Slicer")
-        print("  4. In Slicer Python Interactor (View -> Python Interactor), run:")
-        print(f"     jupyter-kernelspec install '<SlicerExtPath>/SlicerJupyter/share/Slicer-5.6/qt-loadable-modules/JupyterKernel/Slicer-5.6' --replace --user")
+        if system == "Windows":
+            print(f'  Export current detection: set SLICER_PATH="{slicer_exe}"')
+        else:
+            print(f'  Export current detection: export SLICER_PATH="{slicer_exe}"')
+
+    # ── Auto-fix ──
+    if args.fix:
+        print("\n--- Auto-Fix Mode ---")
+        if not has_jc:
+            print("[INFO] Installing jupyter_client...")
+            ok, _, err = run_cmd(f"{sys.executable} -m pip install jupyter_client")
+            if ok:
+                print("  [OK] jupyter_client installed successfully.")
+                has_jc = check_jupyter_client()
+            else:
+                print(f"  [FAIL] pip install failed: {err[:200]}")
+        else:
+            print("  [OK] jupyter_client already installed.")
+
+        if not slicer_exe:
+            print("  [WARN] Slicer not found. Cannot auto-fix.")
+            print("         Please install Slicer or set SLICER_PATH env var manually.")
+        else:
+            print(f"  [OK] Slicer found at: {slicer_exe}")
+
+        if has_jc:
+            if not has_kernel:
+                print("  [WARN] Kernel spec not registered. Cannot auto-fix.")
+                print(f"         To register, start Slicer and install SlicerJupyter extension.")
+            else:
+                print(f"  [OK] Kernel '{args.kernel}' registered.")
+
+        print("--- Auto-Fix Complete ---")
+
+    # ── Summary ──
+    print("\n" + "=" * 60)
+    print("Summary")
+    print("=" * 60)
+    if slicer_exe:
+        print(f"  [YES] Method 1 (Direct {slicer_name}) -- READY")
         if pslicer:
-            print(f"  5. Install IPython into Slicer Python:")
-            print(f'     "{pslicer}" -m pip install ipython')
-        print("  6. Re-run this checker to verify.")
+            print(f"  [YES] Method 2 ({ps_name}) -- READY")
+        else:
+            print(f"  [NO]  Method 2 ({ps_name}) -- NOT AVAILABLE")
+    else:
+        print(f"  [NO]  Method 1 (Direct {slicer_name}) -- NOT AVAILABLE")
+        print(f"  [NO]  Method 2 ({ps_name}) -- NOT AVAILABLE")
+
+    if has_jc and has_kernel:
+        print("  [YES] Method 3 (Jupyter Kernel) -- READY")
+    elif has_jc:
+        print("  [WARN] Method 3 (Jupyter Kernel) -- jupyter_client OK, but kernel not registered")
+    else:
+        print("  [NO]  Method 3 (Jupyter Kernel) -- jupyter_client not installed")
+
+    print()
+    if slicer_exe:
+        print(f"Recommended: Use Method 1 (Direct {slicer_name}) -- no extra setup needed.")
+    else:
+        print("Install Slicer or set SLICER_PATH env var, then re-run this checker.")
+
+    # User hint for env var persistence
+    print()
+    print("Tip: To make the path permanent, add to your shell profile:")
+    if system == "Windows":
+        print(f'  setx SLICER_PATH "{slicer_exe or "<path-to-Slicer>"}"')
+    else:
+        print(f'  export SLICER_PATH="{slicer_exe or "/path/to/Slicer"}"')
     print("=" * 60)
 
-    sys.exit(0 if (has_jupyter and has_jc and has_kernel and slicer_exe and pslicer) else 1)
+    # Success = at least one method available
+    all_ok = slicer_exe is not None or (has_jc and has_kernel)
+    sys.exit(0 if all_ok else 1)
 
 
 if __name__ == "__main__":

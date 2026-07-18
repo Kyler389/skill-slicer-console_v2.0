@@ -1,55 +1,338 @@
 #!/usr/bin/env python3
 """
-Execute a Python script via the Slicer Jupyter kernel.
+Control 3D Slicer from the command line.
+
+Commands:
+  run     Execute a Python script inside Slicer and wait for completion.
+          Supports three backends: direct (Slicer.exe), pythonslicer, jupyter.
+
+  launch  Start Slicer GUI (optionally loading a module) and keep it open.
 
 Usage:
-    python run_slicer_script.py --script ./task.py
-    python run_slicer_script.py --script ./task.py --kernel slicer-5.6 --timeout 120
+    python run_slicer_script.py --mode run --script ./task.py
+    python run_slicer_script.py --mode run --script ./task.py --method pythonslicer
+    python run_slicer_script.py --mode run --script ./task.py --slicer-path "D:/Slicer/Slicer.exe" --timeout 300
+    python run_slicer_script.py --mode launch --module-paths "F:/module" --select-module SlicerAgentController
 """
 
 import argparse
-import sys
+import json
 import os
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+
+# Import shared auto-detection module (sibling in scripts/ dir)
+# Adds SLICER_PATH/SLICER_ROOT env var support, registry search, etc.
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _SCRIPT_DIR)
+import slicer_detect
+import shutil
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Run a Python script in Slicer via Jupyter kernel")
-    parser.add_argument("--script", required=True, help="Path to the Python script to execute")
-    parser.add_argument("--kernel", default="slicer-5.6", help="Jupyter kernel name (default: slicer-5.6)")
-    parser.add_argument("--timeout", type=int, default=60, help="Seconds to wait for kernel ready (default: 60)")
-    args = parser.parse_args()
+# ── Config persistence ────────────────────────────────────────────────
 
-    script_path = os.path.abspath(args.script)
-    if not os.path.isfile(script_path):
-        print(f"ERROR: Script not found: {script_path}", file=sys.stderr)
-        sys.exit(1)
+_CONFIG_PATH = os.path.join(_SCRIPT_DIR, "config.json")
 
-    with open(script_path, "r", encoding="utf-8") as f:
+
+def _read_config():
+    """Read saved user config."""
+    try:
+        with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _validate_config(config):
+    """Check that config has a valid method key."""
+    method = config.get("method")
+    return method in ("direct", "pythonslicer", "jupyter")
+
+
+def _write_config(config):
+    """Write user config."""
+    with open(_CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+
+
+def _resolve_method_from_config(method_arg):
+    """
+    Resolve method from CLI arg + config file.
+
+    Priority: CLI --method flag > config.json > auto-detect.
+    """
+    if method_arg != "auto":
+        return method_arg  # CLI explicit flag wins
+    config = _read_config()
+    if _validate_config(config):
+        return config["method"]
+    return "auto"  # fall back to auto-detect
+
+
+# ── method implementations ────────────────────────────────────────────
+
+
+def _prepare_script(script_path, quit_after=True):
+    """
+    Prepare script for Slicer execution.
+
+    Handles two concerns:
+      1. Non-ASCII paths cause Slicer launcher crash → copy to ASCII-only temp dir.
+      2. Slicer stays open after script → append slicer.app.quit() wrapper.
+
+    Returns path to the prepared script (temp copy if modified).
+    """
+    abs_script = os.path.abspath(script_path)
+
+    # If pure ASCII path and no quit wrapper needed → use original
+    try:
+        abs_script.encode("ascii")
+        if not quit_after:
+            return abs_script
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        pass
+
+    # Read original script content
+    with open(abs_script, "r", encoding="utf-8") as f:
         code = f.read()
+
+    # Append slicer.app.quit() so Slicer exits after script finishes
+    if quit_after:
+        code += (
+            "\n\n"
+            "# slicer-console: auto-appended quit\n"
+            "import slicer\n"
+            "slicer.app.quit()\n"
+        )
+
+    # Write to ASCII-safe temp location
+    safe_dir = os.path.join(tempfile.gettempdir(), "slicer_scripts")
+    os.makedirs(safe_dir, exist_ok=True)
+    safe_name = (
+        f"script_{os.path.getmtime(abs_script):.0f}_"
+        f"{hash(abs_script) & 0x7FFFFFFF:x}.py"
+    )
+    safe_path = os.path.join(safe_dir, safe_name)
+
+    with open(safe_path, "w", encoding="utf-8") as f:
+        f.write(code)
+
+    return safe_path
+
+
+def _kill_slicer(slicer_exe=None):
+    """Terminate Slicer processes (e.g. after timeout)."""
+    system = slicer_detect.get_system()
+    exe_name = slicer_detect.slicer_exe_name() if not slicer_exe else os.path.basename(slicer_exe)
+    print(f"[INFO] Killing Slicer processes ({exe_name})...")
+
+    try:
+        if system == "Windows":
+            subprocess.run(
+                ["taskkill", "/f", "/im", exe_name],
+                capture_output=True, text=True, timeout=30,
+            )
+        else:
+            subprocess.run(
+                ["pkill", "-f", exe_name.replace(".exe", "")],
+                capture_output=True, text=True, timeout=30,
+            )
+        print(f"[INFO] Slicer processes terminated.")
+    except Exception as e:
+        print(f"[WARN] Failed to kill Slicer: {e}", file=sys.stderr)
+
+
+def _create_launch_script(module_name, extra_script=None):
+    """Create a temporary startup script that selects a module (no slicer.app.quit())."""
+    code = (
+        '"""Launch script generated by slicer-console."""\n'
+        "import slicer\n"
+        "import sys\n"
+        f"\nmoduleName = {module_name!r}\n"
+        "if hasattr(slicer.util, 'selectModule'):\n"
+        "    slicer.util.selectModule(moduleName)\n"
+        "    print(f\"[launch] Module '{moduleName}' selected\")\n"
+        "else:\n"
+        '    print(f"[launch] selectModule not available", file=sys.stderr)\n'
+        "    sys.exit(1)\n"
+    )
+    if extra_script:
+        with open(extra_script, "r", encoding="utf-8") as f:
+            code += "\n# --- User extra script ---\n" + f.read()
+
+    # Write to ASCII-safe temp dir
+    safe_dir = os.path.join(tempfile.gettempdir(), "slicer_scripts")
+    os.makedirs(safe_dir, exist_ok=True)
+    safe_name = f"launch_{module_name}_{int(time.time())}.py"
+    safe_path = os.path.join(safe_dir, safe_name)
+
+    with open(safe_path, "w", encoding="utf-8") as f:
+        f.write(code)
+    return safe_path
+
+
+def run_direct(script_path, slicer_exe, timeout, module_paths=None, quit_after=True):
+    """Method 1: Slicer.exe --no-splash --python-script <path>"""
+    print(f"[INFO] Direct method: {slicer_exe}")
+
+    # Prepare script (ASCII-safe path + optional quit wrapper)
+    safe_script = _prepare_script(script_path, quit_after=quit_after)
+    if safe_script != os.path.abspath(script_path):
+        print(f"[INFO] Script prepared at: {safe_script}")
+
+    # Slicer must be launched from its own directory (STATUS_DLL_NOT_FOUND otherwise)
+    slicer_dir = os.path.dirname(os.path.abspath(slicer_exe))
+    cmd = [slicer_exe, "--no-splash"]
+
+    # Add additional module paths if specified
+    if module_paths:
+        sep = ";" if slicer_detect.get_system() == "Windows" else ":"
+        for mp in module_paths.split(sep):
+            mp = mp.strip()
+            if mp:
+                cmd.extend(["--additional-module-paths", os.path.abspath(mp)])
+
+    cmd.extend(["--python-script", safe_script])
+
+    # Set up SLICER_RESULT_FILE for reliable output capture
+    result_file_path = os.path.join(
+        tempfile.gettempdir(), "slicer_scripts",
+        f"result_{os.path.basename(safe_script).replace('.py', '')}.txt"
+    )
+    env = os.environ.copy()
+    env["SLICER_RESULT_FILE"] = result_file_path
+
+    start = time.time()
+
+    # Background monitor — prints heartbeat every 15s while Slicer loads
+    _stop_monitor = threading.Event()
+    def _heartbeat():
+        while not _stop_monitor.wait(15):
+            t = int(time.time() - start)
+            print(f"[INFO] Slicer still running... ({t}s / {timeout}s)")
+    _heartbeat_thread = threading.Thread(target=_heartbeat, daemon=True)
+    _heartbeat_thread.start()
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=slicer_dir,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        _stop_monitor.set()
+        _heartbeat_thread.join(timeout=2)
+        elapsed = time.time() - start
+        print(
+            f"\n[ERROR] Slicer timed out after {elapsed:.0f}s (limit: {timeout}s).",
+            file=sys.stderr,
+        )
+        print("[INFO] The script or Slicer GUI may still be running.", file=sys.stderr)
+        _kill_slicer(slicer_exe)
+        print(f"[INFO] Execution failed — timed out. Exit code: 124")
+        return 124
+
+    _stop_monitor.set()
+    _heartbeat_thread.join(timeout=2)
+    elapsed = time.time() - start
+
+    # Print captured output
+    if proc.stdout:
+        print(proc.stdout)
+    if proc.stderr:
+        stderr_lower = proc.stderr.lower()
+        is_error = any(
+            kw in stderr_lower
+            for kw in ["error", "traceback", "exception", "failed"]
+        )
+        if is_error:
+            print(proc.stderr, file=sys.stderr)
+        else:
+            print(proc.stderr)
+
+    exit_code = proc.returncode
+    print(f"\n[INFO] Execution finished in {elapsed:.1f}s. Exit code: {exit_code}")
+
+    # Read SLICER_RESULT_FILE if the script wrote structured output
+    if os.path.exists(result_file_path):
+        try:
+            with open(result_file_path, "r", encoding="utf-8") as f:
+                result_data = f.read()
+            if result_data.strip():
+                print(f"[RESULT] Script output via $SLICER_RESULT_FILE:")
+                print(result_data)
+            os.remove(result_file_path)
+        except Exception as e:
+            print(f"[WARN] Could not read $SLICER_RESULT_FILE: {e}", file=sys.stderr)
+
+    return exit_code
+
+
+def run_pythonslicer(script_path, pslicer_exe, timeout):
+    """Method 2: PythonSlicer.exe <path> (headless)"""
+    print(f"[INFO] PythonSlicer method: {pslicer_exe}")
+    abs_script = os.path.abspath(script_path)
+    cmd = [pslicer_exe, abs_script]
+
+    start = time.time()
+    proc = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=timeout,
+    )
+    elapsed = time.time() - start
+
+    if proc.stdout:
+        print(proc.stdout)
+    if proc.stderr:
+        print(proc.stderr, file=sys.stderr)
+
+    exit_code = proc.returncode
+    print(f"\n[INFO] Execution finished in {elapsed:.1f}s. Exit code: {exit_code}")
+    return exit_code
+
+
+def run_jupyter(script_path, kernel_name, timeout):
+    """Method 3: Jupyter kernel via jupyter_client (fallback)"""
+    print(f"[INFO] Jupyter method: kernel='{kernel_name}'")
+    abs_script = os.path.abspath(script_path)
 
     try:
         from jupyter_client import KernelManager
     except ImportError as e:
         print(f"ERROR: jupyter_client is not installed. {e}", file=sys.stderr)
         print("Fix: pip install jupyter_client", file=sys.stderr)
-        sys.exit(1)
+        return 1
 
-    km = KernelManager(kernel_name=args.kernel)
+    with open(abs_script, "r", encoding="utf-8") as f:
+        code = f.read()
+
+    km = KernelManager(kernel_name=kernel_name)
     kc = None
     exit_code = 0
 
     try:
-        print(f"[INFO] Starting kernel '{args.kernel}'...")
+        print(f"[INFO] Starting kernel '{kernel_name}'...")
         km.start_kernel()
 
         kc = km.client()
         kc.start_channels()
-        kc.wait_for_ready(timeout=args.timeout)
-        print(f"[INFO] Kernel ready. Executing: {script_path}")
+        kc.wait_for_ready(timeout=timeout)
+        print(f"[INFO] Kernel ready. Executing: {abs_script}")
 
         msg_id = kc.execute(code)
 
-        # Collect iopub messages until execution is idle
         while True:
             try:
                 msg = kc.get_iopub_msg(timeout=10)
@@ -101,6 +384,238 @@ def main():
             print("[INFO] Kernel shutdown.")
         except Exception:
             pass
+
+    return exit_code
+
+
+# ── launch mode ─────────────────────────────────────────────────────────
+
+
+def _print_version():
+    """Detect and print Slicer version from path/binary, then exit."""
+    slicer_exe = slicer_detect.find_slicer(fast=True)
+    if not slicer_exe:
+        print("ERROR: Slicer not found.", file=sys.stderr)
+        sys.exit(1)
+
+    # Extract version from install directory name: "3D Slicer 5.10.0" → "5.10.0"
+    install_dir = os.path.basename(os.path.dirname(os.path.abspath(slicer_exe)))
+    import re
+    m = re.search(r"(\d+\.\d+(?:\.\d+)?)", install_dir)
+    version = m.group(1) if m else "unknown (from path)"
+
+    print(f"Slicer: {slicer_exe}")
+    print(f"Version: {version}")
+
+    # Include Slicer's own version binary info on Windows
+    if slicer_detect.get_system() == "Windows":
+        try:
+            ok, out = slicer_detect._run_cmd(
+                f'wmic datafile where name="{slicer_exe.replace(chr(92), chr(92)*2)}" get Version /value 2>nul'
+            )
+            for line in (out or "").splitlines():
+                line = line.strip()
+                if line.startswith("Version=") and line.count(".") >= 2:
+                    print(f"  (binary version: {line.split('=', 1)[1]})")
+        except Exception:
+            pass
+
+    sys.exit(0)
+
+
+def cmd_launch(args):
+    """Launch Slicer GUI (optionally with module loaded) and keep it open."""
+    slicer_exe = args.slicer_path or slicer_detect.find_slicer(fast=True)
+    if not slicer_exe:
+        print("ERROR: Slicer not found. Pass --slicer-path or set SLICER_PATH.", file=sys.stderr)
+        sys.exit(1)
+
+    slicer_dir = os.path.dirname(os.path.abspath(slicer_exe))
+    cmd = [slicer_exe, "--no-splash"]
+
+    if args.module_paths:
+        sep = ";" if slicer_detect.get_system() == "Windows" else ":"
+        for mp in args.module_paths.split(sep):
+            mp = mp.strip()
+            if mp:
+                cmd.extend(["--additional-module-paths", os.path.abspath(mp)])
+
+    # Create launch script if --select-module or --script given
+    launch_script = None
+    if args.select_module:
+        launch_script = _create_launch_script(args.select_module, args.script)
+        cmd.extend(["--python-script", launch_script])
+        print(f"[INFO] Launch script created: {launch_script}")
+    elif args.script:
+        cmd.extend(["--python-script", os.path.abspath(args.script)])
+
+    print(f"[INFO] Starting Slicer GUI...")
+    print(f"[INFO] Command: {' '.join(cmd)}")
+
+    proc = subprocess.Popen(cmd, cwd=slicer_dir)
+    print(f"[INFO] Slicer started (PID: {proc.pid}). GUI window should appear.")
+    print(f"[INFO] Close Slicer window or press Ctrl+C to stop.")
+
+    try:
+        proc.wait()
+    except KeyboardInterrupt:
+        print(f"\n[INFO] Interrupted. Terminating Slicer (PID: {proc.pid})...")
+        _kill_slicer(slicer_exe)
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+    exit_code = proc.returncode
+    print(f"[INFO] Slicer exited. Code: {exit_code}")
+    return exit_code
+
+
+# ── main ──────────────────────────────────────────────────────────────
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Run a Python script in Slicer's Python environment"
+    )
+    parser.add_argument("--script", help="Path to the Python script to execute (required for --mode run)")
+    parser.add_argument(
+        "--version",
+        action="store_true",
+        help="Detect and print Slicer version, then exit",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["run", "launch"],
+        default="run",
+        help="'run' = execute script and exit (default); 'launch' = start Slicer GUI and keep open",
+    )
+    parser.add_argument(
+        "--select-module",
+        help="For --mode launch: select this module on startup (e.g. SlicerAgentController)",
+    )
+    parser.add_argument(
+        "--method",
+        choices=["auto", "direct", "pythonslicer", "jupyter"],
+        default="auto",
+        help="Execution method (default: auto — tries direct, then pythonslicer, then jupyter)",
+    )
+    parser.add_argument(
+        "--slicer-path",
+        help="Path to Slicer.exe (overrides auto-detection)",
+    )
+    parser.add_argument(
+        "--module-paths",
+        help="Additional module search paths (semicolon-separated, passed to --additional-module-paths)",
+    )
+    parser.add_argument(
+        "--kernel",
+        default="slicer-5.6",
+        help="Jupyter kernel name for --method jupyter (default: slicer-5.6)",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=300,
+        help="Timeout in seconds (default: 300)",
+    )
+    parser.add_argument(
+        "--quit",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Quit Slicer after script execution (default: True, use --no-quit to keep Slicer open)",
+    )
+    parser.add_argument(
+        "--kill-existing",
+        action="store_true",
+        default=False,
+        help="Kill running Slicer processes before starting a new one",
+    )
+    args = parser.parse_args()
+
+    # ── Version detection ──
+    if args.version:
+        _print_version()
+
+    # ── Kill existing Slicer if requested ──
+    if args.kill_existing:
+        print("[INFO] --kill-existing: terminating running Slicer processes...")
+        _kill_slicer()
+        time.sleep(1.5)
+
+    # ── Dispatch: launch mode ───────────────────────────────────────────
+    if args.mode == "launch":
+        exit_code = cmd_launch(args)
+        sys.exit(exit_code)
+
+    # ── run mode ────────────────────────────────────────────────────────
+    if not args.script:
+        print("ERROR: --script is required for --mode run", file=sys.stderr)
+        sys.exit(1)
+
+    script_path = os.path.abspath(args.script)
+    if not os.path.isfile(script_path):
+        print(f"ERROR: Script not found: {script_path}", file=sys.stderr)
+        sys.exit(1)
+
+    # Determine method: CLI > config > auto-detect
+    method = _resolve_method_from_config(args.method)
+
+    if method == "auto":
+        # Auto-detect: try direct → pythonslicer → jupyter
+        slicer_exe = args.slicer_path or slicer_detect.find_slicer(fast=True)
+        if slicer_exe:
+            method = "direct"
+        else:
+            pslicer = slicer_detect.find_pythonslicer()
+            if pslicer:
+                method = "pythonslicer"
+            else:
+                # Check if jupyter_client is available
+                try:
+                    import jupyter_client  # noqa: F401
+                    method = "jupyter"
+                except ImportError:
+                    print(
+                        "ERROR: No Slicer executable found and jupyter_client not available.",
+                        file=sys.stderr,
+                    )
+                    print("Install Slicer or run: pip install jupyter_client", file=sys.stderr)
+                    print("Set SLICER_PATH env var to point to Slicer.", file=sys.stderr)
+                    sys.exit(1)
+
+    # Resolve executables for direct/pythonslicer methods
+    if method in ("direct", "pythonslicer"):
+        if args.slicer_path:
+            slicer_exe = args.slicer_path
+        else:
+            slicer_exe = slicer_detect.find_slicer(fast=True)
+            if not slicer_exe:
+                print(
+                    "ERROR: Slicer not found. Pass --slicer-path, set SLICER_PATH env var, "
+                    "or run setup_checker.py to diagnose.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+
+    # Execute
+    if method == "direct":
+        exit_code = run_direct(script_path, slicer_exe, args.timeout, args.module_paths, quit_after=args.quit)
+    elif method == "pythonslicer":
+        pslicer = slicer_detect.find_pythonslicer(slicer_exe)
+        if not pslicer:
+            ps_name = slicer_detect.pythonslicer_exe_name()
+            print(
+                f"ERROR: {ps_name} not found alongside {slicer_exe}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        exit_code = run_pythonslicer(script_path, pslicer, args.timeout)
+    elif method == "jupyter":
+        exit_code = run_jupyter(script_path, args.kernel, args.timeout)
+    else:
+        print(f"ERROR: Unknown method '{method}'", file=sys.stderr)
+        sys.exit(1)
 
     sys.exit(exit_code)
 

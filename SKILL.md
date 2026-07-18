@@ -1,141 +1,295 @@
 ---
 name: slicer-console
 description: >
-  Execute Slicer Python scripts via Jupyter kernel.
+  Execute Slicer Python scripts via direct Slicer.exe --python-script,
+  PythonSlicer.exe headless, or Jupyter kernel fallback.
   Triggered when user mentions "slicer console", "slicer python", "slicer 脚本",
   "在 slicer 里运行", "slicer 计算", or similar.
 ---
 
 # slicer-console
 
-Execute Slicer Python scripts via Jupyter kernel.
+Execute Slicer Python scripts via multiple backends. The skill auto-selects the best available method.
 
-## Trigger
+## Execution Methods
 
-User mentions any of the following (or similar):
-- "slicer console"
-- "slicer python console"
-- "用 slicer 的 console 执行"
-- "slicer python"
-- "slicer 脚本"
-- "slicer 计算"
-- "在 slicer 里运行"
+| # | Method | Command | Speed | GUI | Requires |
+|---|--------|---------|-------|-----|----------|
+| 1 | **Direct Slicer.exe** (Primary) | `Slicer.exe --no-splash --python-script <path>` | 20–40s | Brief flash | Slicer installed |
+| 2 | **PythonSlicer.exe** (Headless) | `PythonSlicer.exe <path>` | 5–15s | None | Slicer installed |
+| 3 | **Jupyter Kernel** (Fallback) | `jupyter_client` KernelManager | 20–40s | None | Kernel spec + jupyter_client |
+
+The runner script auto-detects which method to use:
+- **Method 1** (default): Most reliable, full Slicer environment, proven by SlicerAgentController project.
+- **Method 2**: For lightweight scripts that only need Slicer Python APIs without GUI.
+- **Method 3**: When you need headless + don't want a new Slicer process each time.
 
 ## Action
 
+### 0. Method Selection (First-Time Only)
+
+Before executing any script, check the saved configuration:
+
+1. **Read** `config.json` at `~/.claude/skills/slicer-console/scripts/config.json`
+2. **If config exists** with a `"method"` key → use it silently
+3. **If no config** → present the user with method options:
+
+   | # | Method | Speed | GUI | Reliability | Best For |
+   |---|--------|-------|-----|------------|----------|
+   | 1 | **direct** — `Slicer --no-splash --python-script` | 20–40s | Brief flash | ★★★★★ | Default, most compatible |
+   | 2 | **pythonslicer** — `PythonSlicer.exe` / `python-real` | 5–15s | None | ★★★★☆ | Headless batch processing |
+   | 3 | **jupyter** — Jupyter kernel via `jupyter_client` | 20–40s | None | ★★★☆☆ | Legacy, requires kernel setup |
+
+   Ask the user to pick one, then **save** to `config.json`:
+   ```json
+   {"method": "direct", "updated": "2026-07-19T..."}
+   ```
+
+   The user can override their saved choice at any time with `--method <name>`.
+
+### 1. Write Script
+
 1. **Write a Python script** that solves the user's request using `slicer`, `vtk`, `mrml`, and related Slicer APIs.
 2. **Save the script** to `./.slicer_temp/task_<timestamp>.py`. Create the `.slicer_temp` directory if it does not exist.
-3. **Run the script** using the provided connector:
+3. **Run the script** using the unified connector:
    ```bash
-   python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py --script ./.slicer_temp/task_<timestamp>.py
+   python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py --mode run --script ./.slicer_temp/task_<timestamp>.py
    ```
-   Do NOT use `jupyter run` or `jupyter console` directly, because Slicer's GUI startup takes 20–40 seconds and will exceed their default timeout.
+   The runner reads the saved method from `config.json` automatically. Optional overrides:
+   - `--mode run` — execute script and auto-quit (default)
+   - `--mode launch` — start Slicer GUI and keep open (e.g. for module testing)
+   - `--method direct` — `Slicer --python-script` (default for new installs)
+   - `--method pythonslicer` — `PythonSlicer` / `python-real` headless
+   - `--method jupyter` — Jupyter kernel fallback
+   - `--slicer-path "D:/path/to/Slicer.exe"` — override Slicer executable
+   - `--module-paths "path1;path2"` — additional module search paths (for external modules)
+   - `--select-module "ModuleName"` — select a module on startup (for --mode launch)
+   - `--quit` / `--no-quit` — auto-quit Slicer after script (default: --quit)
+   - `--kernel slicer-5.6` — kernel name for jupyter method (default: slicer-5.6)
+   - `--timeout 300` — timeout in seconds (default: 300)
+   - `--version` — detect and print Slicer version (without launching Slicer)
+   - `--kill-existing` — kill running Slicer processes before starting
 4. **Return the output** to the user and report the script path.
 
-Use `print("RESULT:", ...)` in the script for easy parsing of key results.
-
-## Execution
-
-Slicer takes 20–40 seconds to start, so standard `jupyter run` (1-second timeout) and `jupyter console` (requires interactive TTY) will fail.
-
-The skill provides a custom connector with `jupyter_client` that handles long timeouts and collects all output:
+### Examples
 
 ```bash
-python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py --script <path> [--kernel slicer-5.6] [--timeout 60]
+# Default: execute script and auto-quit (recommended)
+python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py --mode run --script ./.slicer_temp/task_001.py
+
+# Launch Slicer GUI with an external module loaded
+python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py --mode launch --module-paths "F:\slicer_module\SlicerAgentController" --select-module SlicerAgentController
+
+# Headless method (no GUI)
+python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py --mode run --method pythonslicer --script ./.slicer_temp/task_001.py
+
+# Jupyter kernel fallback
+python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py --mode run --method jupyter --script ./.slicer_temp/task_001.py --kernel slicer-5.6
 ```
 
-- `--script` — required, path to the Python file to execute.
-- `--kernel` — optional, kernel name (default `slicer-5.6`).
-- `--timeout` — optional, seconds to wait for kernel ready (default 60).
+## Scripting Conventions
 
-The connector prints stdout/stderr live, captures execution results and tracebacks, and shuts down the kernel automatically.
+Based on learnings from the SlicerAgentController project and Slicer 5.10 Python 3.12 environment:
 
-## Manual Setup (One-Time)
+### Absolute paths
+Always use absolute paths for input/output files inside the script — Slicer's working directory may differ from yours.
 
-The following steps must be performed by the user inside the Slicer GUI. Claude cannot automate these.
+### Result printing
+Use `print("RESULT:", value)` so the caller can easily parse key outputs.
 
-### Step 1: Install SlicerJupyter Extension
+### Structured output via `$SLICER_RESULT_FILE`
+For reliable output capture (especially on Windows where GUI app stdout can be lost),
+the runner sets the `SLICER_RESULT_FILE` environment variable pointing to a temp file.
+Scripts can write structured results there, and the runner will read and display them
+after Slicer exits:
 
-1. Open **3D Slicer**.
-2. Go to **View → Extension Manager**.
-3. Search for **SlicerJupyter** and install it.
-4. **Restart Slicer** when prompted.
+```python
+import os, json
+result_file = os.environ.get("SLICER_RESULT_FILE")
+if result_file:
+    with open(result_file, "w") as f:
+        f.write(json.dumps({"status": "ok", "volume": "Sample"}))
+```
 
-### Step 2: Install the Jupyter Kernel Spec
+### API fallback patterns
+If a direct Slicer API method raises `AttributeError`, fall back to `slicer.modules.<moduleName>.logic()` methods, or export to labelmap/volume nodes first.
 
-1. In Slicer, open **View → Python Interactor**.
-2. Run the following command (adjust the path if your Slicer version differs):
-   ```python
-   jupyter-kernelspec install "<SlicerExtPath>/SlicerJupyter/share/Slicer-5.6/qt-loadable-modules/JupyterKernel/Slicer-5.6" --replace --user
-   ```
-   - `<SlicerExtPath>` is usually under your Slicer settings directory, e.g.:
-     - Windows: `%LOCALAPPDATA%\NA-MIC\Slicer 5.6.1\` or similar
-3. Verify the kernel is registered:
-   ```bash
-   jupyter kernelspec list
-   ```
-   You should see `slicer-5.6` in the list.
+### No GUI interaction
+For `--python-script` mode: scripts run with a briefly visible Slicer window — do not open dialog boxes (`qt.QMessageBox`, file dialogs) as they will block execution.
 
-### Step 3: Install IPython inside Slicer Python
+For `PythonSlicer.exe` mode: no GUI at all. VTK render window operations will fail.
 
-The SlicerJupyter xeus kernel requires IPython:
+### Templates
+
+Ready-to-use script templates are at `scripts/templates/`:
+
+| Template | Description |
+|----------|-------------|
+| `segmentation.py` | Load volume, create segmentation, export `.seg.nrrd` |
+| `prediction.py` | ML inference pipeline (placeholder) |
+| `data_io.py` | List/nodes, export/import volumes |
+
+Usage: `python run_slicer_script.py --mode run --script templates/segmentation.py`
+
+### Slicer Python 3.12 specifics (Slicer 5.10)
+- Slicer 5.10 ships Python 3.12.10
+- `slicer.util` methods for array access: `arrayFromVolume()`, `arrayFromVolumeModified()`
+- `PythonQt` vs `PyQt` differences: `QScrollBar.maximum`, `QTreeWidgetItem.childCount`, `QSpinBox.value`, `QLabel.text` are **properties not methods** — check with `callable()` before calling
+- `slicer.modules` attribute names are **lowercase module names**
+- `QWidget.layout` is a **property** — do not call `self.layout()`, store layout as `self._layout = qt.QVBoxLayout(self)` instead
+- For custom QWidget subclasses: **never override virtual functions** (`resizeEvent`, `mouseDoubleClickEvent`), use `installEventFilter(self)` instead
+- Avoid `setParent(None) + deleteLater()` on Python QWidget subclasses — causes double-free crash. Use `layout.removeWidget(w) + w.hide()` instead
+
+### Worker thread safety
+If the script spawns threads, worker threads must **never** directly touch Qt/VTK/Slicer nodes. Marshal all GUI/scene operations to the main thread (e.g., via `slicer.app.processEvents()` or custom event queues).
+
+### Example
+```python
+import slicer
+
+# List all volumes
+for vol in slicer.util.getNodesByClass("vtkMRMLScalarVolumeNode"):
+    name = vol.GetName()
+    dims = vol.GetImageData().GetDimensions() if vol.GetImageData() else (0, 0, 0)
+    print(f"  Volume '{name}': dimensions = {dims}")
+
+# Create a sample volume
+import numpy as np
+node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", "Sample")
+voxels = slicer.util.arrayFromVolume(node)
+voxels[:] = 100
+slicer.util.arrayFromVolumeModified(node)
+print("RESULT: done")
+```
+
+## Auto-Detection
+
+The skill includes a multi-strategy auto-detection engine (`scripts/slicer_detect.py`) that locates Slicer on any machine without configuration.
+
+### Detection Strategies (in order)
+
+| # | Strategy | Speed | Platforms | Description |
+|---|----------|-------|-----------|-------------|
+| 1 | `SLICER_PATH` env var | Instant | All | Full path to Slicer executable |
+| 2 | `SLICER_ROOT` env var | Instant | All | Directory containing Slicer executable |
+| 3 | Common install paths | Instant | Win/Mac/Linux | Well-known paths for all Slicer versions |
+| 4 | Windows Registry | Fast | Win | Queries `HKLM\SOFTWARE\Slicer` and related keys |
+| 5 | `PATH` scan | Fast | All | Checks if Slicer is on system PATH |
+| 6 | Unix dirs + AppImage + /Volumes scan | Slow | Linux/Mac | Scans `/opt/`, `/usr/local/`, `/Applications/`, `~/`; Linux `*Slicer*.AppImage` in `~/Downloads/`; macOS `/Volumes/` for mounted .dmg |
+| 7 | Program Files scan | Slow | Win | Walks `%PROGRAMFILES%` looking for `*Slicer*` dirs |
+| 8 | Drive root scan | Slow | Win | Checks `C:\`, `D:\`, etc. for Slicer directories |
+| 9 | macOS Spotlight | Slow | Mac | Uses `mdfind` to locate Slicer.app bundles |
+
+**Fast mode** (strategies 1–5) runs by default. Slow fallbacks only activate when fast mode can't find Slicer.
+
+**Cross-platform**: The same skill works on Windows, macOS, and Linux without modification. Platform-specific strategies are guarded by `platform.system()` and only activate on the relevant OS.
+
+### Setting a Permanent Path
+
+If auto-detection doesn't find Slicer on your machine, set one of these env vars:
 
 ```bash
-"<SlicerDir>/bin/PythonSlicer.exe" -m pip install ipython
+# Windows (Command Prompt)
+setx SLICER_PATH "D:\slicer\3D Slicer 5.10.0\Slicer.exe"
+
+# Windows (PowerShell)
+[Environment]::SetEnvironmentVariable("SLICER_PATH", "D:\slicer\3D Slicer 5.10.0\Slicer.exe", "User")
+
+# macOS / Linux
+export SLICER_PATH="/Applications/Slicer.app/Contents/MacOS/Slicer"
 ```
 
-- Example on Windows: `"D:\slicer\Slicer 5.6.1\bin\PythonSlicer.exe" -m pip install ipython`
+Or set the directory:
+```bash
+setx SLICER_ROOT "D:\slicer\3D Slicer 5.10.0"
+```
 
-### Step 4: Verify Everything
+### Prerequisites (External Python)
+The runner script runs in your external Python (not Slicer's Python). It needs:
+- **Python 3.8+** — any environment
+- **`jupyter_client`** — only needed for `--method jupyter` fallback
 
-Run the diagnostic script:
+## Troubleshooting
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| `Slicer not found` | Not installed or path not detected | Pass `--slicer-path`, set `SLICER_PATH` env var, or run `setup_checker.py` |
+| Slicer exits with code 0 but no output | Script may have syntax error in Slicer's Python | Check script for Python 3.12 compatibility |
+| `ModuleNotFoundError: No module named 'IPython'` | Jupyter method without IPython in Slicer's Python | Use `--method direct` instead, or install IPython in Slicer Python |
+| `NoSuchKernel: No such kernel named slicer-5.6` | Jupyter kernel not registered | Use `--method direct` instead (recommended) |
+| Script hangs after execution | Slicer window stays open | Use `--mode run` (auto-quits). Or pass `--no-quit` to keep open intentionally. |
+| Qt errors about `setParent` / `deleteLater` | PythonQt teardown double-free | Use `layout.removeWidget(w) + w.hide()` instead |
+| `--additional-module-paths` has no effect on Linux | AppImage is read-only filesystem | Extract AppImage first: `./Slicer*.AppImage --appimage-extract && ./squashfs-root/AppRun` |
+| `AttributeError` on slicer API | Using C++ method that moved | Fall back to `slicer.modules.*.logic()` or `slicer.util.*` |
+| `QWidget.layout` call crashes | Layout accessed as method not property | Use `self._layout` member variable instead |
+
+## Diagnostics
+
+Run the setup checker to verify your environment:
 
 ```bash
 python ~/.claude/skills/slicer-console/scripts/setup_checker.py
 ```
 
+For detailed strategy-by-strategy detection results:
+```bash
+python ~/.claude/skills/slicer-console/scripts/setup_checker.py --verbose
+```
+
 It checks:
-- `jupyter` CLI availability
-- `jupyter_client` package
-- `slicer-5.6` kernel registration
-- Slicer executable location
-- PythonSlicer location
+- Slicer executable (auto-detected via 8 strategies, or overridable via `SLICER_PATH` env var)
+- PythonSlicer executable
+- `jupyter_client` (for jupyter fallback method)
+- `slicer-5.6` kernel registration (optional fallback)
 
-If anything is missing, the script prints the exact fix.
+### Diagnostic: Test detection directly
 
-## Environment Prerequisites
+```bash
+python ~/.claude/skills/slicer-console/scripts/slicer_detect.py
+```
 
-| Component | Requirement | Checked By |
-|-----------|-------------|------------|
-| 3D Slicer | Installed and runnable | `setup_checker.py` |
-| SlicerJupyter | Installed via Extension Manager | Manual (Step 1) |
-| Kernel spec | `slicer-5.6` registered with Jupyter | Manual (Step 2) + `setup_checker.py` |
-| IPython | Installed inside Slicer Python | Manual (Step 3) + `setup_checker.py` |
-| `jupyter_client` | Installed in the external Python env | `setup_checker.py` |
+## Method Details
 
-## Scripting Conventions
+### Method 1: Direct Slicer.exe (--python-script)
 
-- **Absolute paths**: always use absolute paths for input/output files inside the script.
-- **Result printing**: use `print("RESULT:", value)` so the caller can easily parse key outputs.
-- **API fallback**: if a direct Slicer API method raises `AttributeError`, fall back to `slicer.modules.<moduleName>.logic()` methods or export to labelmap/volume nodes first, rather than relying on obscure internal C++ APIs.
-- **No GUI interaction**: scripts run in a headless kernel context — do not open dialog boxes or rely on the render window.
+The most reliable method. Launches Slicer with `--python-script` flag — Slicer starts, executes the script, and exits.
 
-## Example
+```bash
+# Equivalent manual command:
+"D:\slicer\3D Slicer 5.10.0\Slicer.exe" --no-splash --python-script "<absolute_path_to_script>"
+```
 
-See [`references/example_script.py`](references/example_script.py) for a minimal working script that lists scene volumes or creates a sample volume.
+**Pros**: Full Slicer environment, all modules available, no extra setup.
+**Cons**: Brief GUI flash, 20–40s startup, creates new Slicer process each run.
 
-## Troubleshooting
+**Note**: On Windows, the `--no-splash` flag suppresses the splash screen but the Slicer window still briefly appears. This is normal.
 
-| Symptom | Cause | Fix |
-|---------|-------|-----|
-| `NoSuchKernel: No such kernel named slicer-5.6` | Kernel spec not installed | Follow Manual Setup Step 2 |
-| `ModuleNotFoundError: No module named 'IPython'` | IPython missing inside Slicer Python | Follow Manual Setup Step 3 |
-| `ModuleNotFoundError: No module named 'jupyter_client'` | Connector env missing package | `pip install jupyter_client` |
-| Kernel hangs at "Starting kernel..." | Slicer executable not found or blocked | Check Slicer path and antivirus |
-| `AttributeError` on Slicer API | Using an internal C++ method that moved | Fall back to `slicer.modules.*.logic()` |
+If you need to load additional modules:
+```bash
+"D:\slicer\3D Slicer 5.10.0\Slicer.exe" --no-splash --additional-module-paths "F:/path/to/module" --python-script "<script>"
+```
 
-## Notes
+### Method 2: PythonSlicer.exe (Headless)
 
-- Assume kernel `slicer-5.6` is already installed and registered after the one-time setup above.
-- The connector script handles the long startup time and TTY issues that break `jupyter run` / `jupyter console`.
-- On Windows, if the kernel path was copied manually, ensure the JSON file inside it points to the correct Slicer executable path.
+Lighter weight — just Slicer's Python interpreter without the GUI application.
+
+```bash
+# Equivalent manual command:
+"D:\slicer\3D Slicer 5.10.0\bin\PythonSlicer.exe" "<absolute_path_to_script>"
+```
+
+**Pros**: No GUI, faster startup (5–15s), good for batch processing.
+**Cons**: Some Slicer modules that require GUI/app initialization may not work. `import slicer` should still work for data access APIs.
+
+### Method 3: Jupyter Kernel (Fallback)
+
+Original method — communicates with a running Slicer Jupyter kernel via `jupyter_client`.
+
+**Pros**: Headless, kernel stays warm between runs.
+**Cons**: Requires `SlicerJupyter` extension + kernel spec setup, may not be configured.
+
+## References
+
+- SlicerAgentController project (`F:\slicer_module\SlicerAgentController\`) — source of direct `--python-script` method and scripting conventions
+- Slicer Python API: `slicer.util`, `slicer.modules`, `vtk`, `mrml`
+- [3D Slicer Documentation](https://slicer.readthedocs.io/)
