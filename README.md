@@ -1,130 +1,112 @@
 # slicer-console
 
-**Execute Python scripts in 3D Slicer from the command line.**  
-A unified CLI tool with three execution backends, cross-platform auto-detection, and structured output capture.
+A [Claude Code Skill](https://claude.ai/code) that lets you execute Python scripts inside **3D Slicer** from the command line.
 
-```
-python run_slicer_script.py --mode run --script task.py
-```
+It provides a unified runner with three execution backends, cross-platform auto-detection, structured output capture, and ready-to-use templates for segmentation, inference, and data I/O.
 
 ---
 
-## Features
+## Install this skill in your Claude Code agent
 
-- **Three backends** — Direct Slicer.exe, headless PythonSlicer, or Jupyter kernel fallback
-- **Auto-detection** — 9 strategies across Windows, macOS, and Linux; no configuration needed
-- **Two run modes** — `run` (execute + exit) or `launch` (open GUI, keep it open)
-- **Structured output** — `$SLICER_RESULT_FILE` env var for reliable result capture
-- **Auto-quit** — `slicer.app.quit()` appended automatically; override with `--no-quit`
-- **Timeout & cleanup** — configurable timeout (default 300s) + automatic zombie process killing
-- **Progress heartbeat** — live feedback every 15s during long-running scripts
-- **Script templates** — segmentation, prediction, data import/export templates included
-- **Diagnostics** — `setup_checker.py` validates your environment (`--verbose`, `--fix`)
-- **Method persistence** — preferred backend saved to `config.json`, override via `--method`
-- **Cross-platform** — works identically on Windows, macOS (Intel/Apple Silicon), and Linux
-
----
-
-## Execution Methods
-
-| # | Method | Command | Startup | GUI | Best For |
-|---|--------|---------|---------|-----|----------|
-| 1 | **Direct** (default) | `Slicer.exe --no-splash --python-script` | 20–40s | Brief flash | Most reliable, full Slicer environment |
-| 2 | **PythonSlicer** | `PythonSlicer.exe` / `python-real` | 5–15s | None | Headless batch, lightweight scripts |
-| 3 | **Jupyter** | `jupyter_client` KernelManager | 20–40s | None | Legacy; warm kernel between runs |
-
-The tool auto-selects the best available method. Override with `--method direct|pythonslicer|jupyter` or save a preference to `config.json`.
-
----
-
-## Quick Start
-
-### 1. Check your environment
+### 1. Clone into your skills directory
 
 ```bash
+# macOS / Linux
+git clone git@github.com:Kyler389/skill-slicer-console_v2.0.git \
+  ~/.claude/skills/slicer-console
+
+# Windows (PowerShell)
+git clone git@github.com:Kyler389/skill-slicer-console_v2.0.git `
+  "$env:USERPROFILE\.claude\skills\slicer-console"
+```
+
+> **Note:** The directory name under `~/.claude/skills/` must be `slicer-console` so Claude Code recognizes the skill.
+
+### 2. Verify your environment
+
+```bash
+cd ~/.claude/skills/slicer-console/scripts
 python setup_checker.py
 ```
 
-Shows which methods are available. Pass `--verbose` for strategy-by-strategy detection details, `--fix` to automatically `pip install jupyter_client` if needed.
+This checks whether 3D Slicer is detected and which execution methods are available. Use `--verbose` for per-strategy details or `--fix` to auto-install optional dependencies.
 
-### 2. Write a script
+### 3. Choose your default execution method (first time only)
 
-```python
-# task.py
-import slicer, numpy as np
+The runner will ask you to pick a backend on first use, or you can create `scripts/config.json` manually:
 
-# List volumes
-for vol in slicer.util.getNodesByClass("vtkMRMLScalarVolumeNode"):
-    dims = vol.GetImageData().GetDimensions() if vol.GetImageData() else (0, 0, 0)
-    print(f"Volume '{vol.GetName()}': {dims}")
-
-# Create a sample volume
-node = slicer.mrmlScene.AddNewNodeByClass("vtkMRMLScalarVolumeNode", "Sample")
-voxels = slicer.util.arrayFromVolume(node)
-voxels[:] = 100
-slicer.util.arrayFromVolumeModified(node)
-print("Done")
+```json
+{"method": "direct", "updated": "2026-07-19T00:00:00"}
 ```
 
-### 3. Run it
-
-```bash
-python run_slicer_script.py --mode run --script task.py
-```
+Allowed values: `direct`, `pythonslicer`, `jupyter`. You can always override with `--method <name>`.
 
 ---
 
-## Usage
+## How to use
 
-### Run a script and exit (default)
+Once installed, mention Slicer in Claude Code and the skill will be activated, for example:
+
+> "Run a Slicer script that lists all volumes in the scene."
+> "Use slicer python to threshold this volume and save the segmentation."
+
+Claude Code will then:
+
+1. Write a Python script to `./.slicer_temp/task_<timestamp>.py` in your current working directory.
+2. Invoke `scripts/run_slicer_script.py` with the configured backend.
+3. Return the script output and the script path.
+
+### Manual CLI usage
 
 ```bash
-python run_slicer_script.py --mode run --script ./.slicer_temp/task_001.py
-```
+# Run a script and exit
+python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py \
+  --mode run --script ./.slicer_temp/task_001.py
 
-### Launch Slicer GUI with a module loaded
-
-```bash
-python run_slicer_script.py --mode launch \
+# Launch Slicer GUI with a custom module
+python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py \
+  --mode launch \
   --module-paths "F:/slicer_module/SlicerAgentController" \
   --select-module SlicerAgentController
+
+# Headless batch execution
+python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py \
+  --mode run --method pythonslicer --script task.py
 ```
 
-### Headless execution (PythonSlicer)
-
-```bash
-python run_slicer_script.py --mode run --method pythonslicer --script task.py
-```
-
-### Jupyter kernel fallback
-
-```bash
-python run_slicer_script.py --mode run --method jupyter --script task.py --kernel slicer-5.6
-```
-
-### All command-line options
+### Common CLI options
 
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--script PATH` | Python script to execute | — |
 | `--mode run\|launch` | Run mode | `run` |
-| `--method auto\|direct\|pythonslicer\|jupyter` | Execution method | `auto` |
-| `--slicer-path PATH` | Override Slicer executable path | auto-detected |
-| `--module-paths "p1;p2"` | Additional module search paths | — |
-| `--select-module NAME` | Select a module on launch | — |
+| `--method auto\|direct\|pythonslicer\|jupyter` | Execution backend | `auto` |
+| `--slicer-path PATH` | Override Slicer executable | auto-detected |
+| `--module-paths "p1;p2"` | Extra module search paths | — |
+| `--select-module NAME` | Select module on launch | — |
 | `--kernel NAME` | Jupyter kernel name | `slicer-5.6` |
 | `--timeout SEC` | Timeout in seconds | `300` |
-| `--quit / --no-quit` | Auto-quit after script | `--quit` |
+| `--quit` / `--no-quit` | Auto-quit after script | `--quit` |
 | `--kill-existing` | Kill running Slicer processes first | off |
-| `--version` | Print Slicer version (no launch) | — |
-
-> **Note:** `--quit` works when Qt event loop is active (e.g. when `selectModule` runs). For pure computation scripts, Slicer may not auto-exit — use `--kill-existing` or `taskkill`/`pkill` to clean up.
+| `--version` | Print detected Slicer version | — |
 
 ---
 
-## Structured Output
+## Execution methods
 
-The runner sets the `SLICER_RESULT_FILE` environment variable pointing to a temp file. Scripts can write structured results there for reliable capture:
+| # | Method | Command | Startup | GUI | Best for |
+|---|--------|---------|---------|-----|----------|
+| 1 | **Direct** (default) | `Slicer.exe --no-splash --python-script` | 20–40s | Brief flash | Most reliable, full Slicer environment |
+| 2 | **PythonSlicer** | `PythonSlicer.exe` / `python-real` | 5–15s | None | Headless batch processing |
+| 3 | **Jupyter** | `jupyter_client` KernelManager | 20–40s | None | Legacy; warm kernel between runs |
+
+The runner auto-selects the best available backend. Override anytime with `--method <name>`.
+
+---
+
+## Structured output
+
+For reliable result capture (especially on Windows where GUI-app stdout may be lost), the runner sets `$SLICER_RESULT_FILE`:
 
 ```python
 import os, json
@@ -134,29 +116,29 @@ if result_file:
         json.dump({"status": "ok", "volume": "Sample"}, f)
 ```
 
-The runner reads and displays the contents after Slicer exits.
+The runner reads and displays this file after Slicer exits.
 
 ---
 
-## Auto-Detection
+## Auto-detection
 
-The `slicer_detect.py` engine locates Slicer using 9 strategies, in order:
+`slicer_detect.py` locates Slicer using 9 strategies in order:
 
-| # | Strategy | Speed | Platforms | Description |
-|---|----------|-------|-----------|-------------|
-| 1 | `SLICER_PATH` env var | Instant | All | Full path to Slicer executable |
-| 2 | `SLICER_ROOT` env var | Instant | All | Directory containing Slicer |
-| 3 | Common install paths | Instant | Win/Mac/Linux | Well-known paths for all Slicer versions |
-| 4 | Windows Registry | Fast | Win | `HKLM\SOFTWARE\Slicer` keys |
-| 5 | `PATH` scan | Fast | All | Checks system PATH |
-| 6 | Unix dirs + AppImage + /Volumes | Slow | Linux/Mac | AppImage in `~/Downloads/`, /Volumes for macOS .dmg |
-| 7 | Program Files scan | Slow | Win | Walks `%PROGRAMFILES%` for Slicer directories |
-| 8 | Drive root scan | Slow | Win | Checks `C:\`, `D:\` etc. for Slicer |
-| 9 | macOS Spotlight | Slow | Mac | `mdfind` to locate Slicer.app |
+| # | Strategy | Platforms | Description |
+|---|----------|-----------|-------------|
+| 1 | `SLICER_PATH` env var | All | Full path to Slicer executable |
+| 2 | `SLICER_ROOT` env var | All | Directory containing Slicer executable |
+| 3 | Common install paths | Win/Mac/Linux | Well-known default paths |
+| 4 | Windows Registry | Win | `HKLM\SOFTWARE\Slicer` keys |
+| 5 | `PATH` scan | All | Slicer on system `PATH` |
+| 6 | Unix dirs + AppImage + `/Volumes` | Linux/Mac | Scans `~/Downloads/`, `/Applications/`, mounted `.dmg` |
+| 7 | Program Files scan | Win | Walks `%PROGRAMFILES%` |
+| 8 | Drive root scan | Win | Checks `C:\`, `D:\`, etc. |
+| 9 | macOS Spotlight | Mac | `mdfind` to locate `Slicer.app` |
 
-**Fast mode** (strategies 1–5) runs by default. Slow fallbacks activate automatically when fast mode fails.
+Fast mode (strategies 1–5) runs by default. Slow fallbacks activate only when needed.
 
-Set a permanent path:
+Set a permanent path if detection fails:
 
 ```bash
 # Windows
@@ -169,93 +151,90 @@ export SLICER_PATH="/Applications/Slicer.app/Contents/MacOS/Slicer"
 export SLICER_PATH="$HOME/Downloads/Slicer-5.10.0-linux-amd64.AppImage"
 ```
 
-Run the diagnostic tool to test detection:
-
-```bash
-python slicer_detect.py
-```
-
 ---
 
-## Script Templates
+## Script templates
 
-Ready-to-use templates in `scripts/templates/`:
+Located in `scripts/templates/`:
 
 | Template | File | Description |
 |----------|------|-------------|
-| **Segmentation** | `segmentation.py` | Load volume, create threshold-based segmentation, export `.seg.nrrd` |
-| **Prediction** | `prediction.py` | ML inference pipeline placeholder with volume I/O |
-| **Data I/O** | `data_io.py` | Scene listing, volume export/import |
+| Segmentation | `segmentation.py` | Load volume, threshold segmentation, export `.seg.nrrd` |
+| Prediction | `prediction.py` | ML inference pipeline placeholder with volume I/O |
+| Data I/O | `data_io.py` | Scene listing, volume export/import |
 
 ```bash
-python run_slicer_script.py --mode run --script scripts/templates/segmentation.py
+python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py \
+  --mode run --script ~/.claude/skills/slicer-console/scripts/templates/segmentation.py
 ```
 
 ---
 
-## Slicer 5.10 (Python 3.12) Notes
+## Scripting conventions
 
-- Slicer 5.10 ships Python 3.12.10
-- `slicer.util` methods: `arrayFromVolume()`, `arrayFromVolumeModified()`
-- `PythonQt` vs `PyQt`: `QScrollBar.maximum`, `QTreeWidgetItem.childCount`, `QSpinBox.value`, `QLabel.text` are **properties, not methods** — check with `callable()` before calling
-- `slicer.modules` attribute names are **lowercase**
-- `QWidget.layout` is a **property** — never override, use `installEventFilter(self)` instead
-- Avoid `setParent(None) + deleteLater()` on Python `QWidget` subclasses — causes double-free crash. Use `layout.removeWidget(w) + w.hide()`
+- **Absolute paths** for input/output files.
+- **Print with `RESULT:` prefix** for easy parsing.
+- **Write structured results** to `$SLICER_RESULT_FILE`.
+- **API fallback:** if a direct Slicer API raises `AttributeError`, try `slicer.modules.<moduleName>.logic()`.
+- **No GUI dialogs** in `--python-script` mode — they block execution.
+- **PythonQt properties:** in Slicer 5.10 / Python 3.12, attributes like `QWidget.layout`, `QSpinBox.value`, and `QLabel.text` are properties, not methods.
+- **Avoid `setParent(None) + deleteLater()`** on Python `QWidget` subclasses — use `layout.removeWidget(w) + w.hide()` to prevent double-free crashes.
 
 ---
 
-## Diagnostics
+## Diagnostics & troubleshooting
 
 ```bash
-# Quick check
-python setup_checker.py
+# Quick environment check
+python ~/.claude/skills/slicer-console/scripts/setup_checker.py
 
-# Detailed + auto-fix
-python setup_checker.py --verbose --fix
+# Detailed detection report
+python ~/.claude/skills/slicer-console/scripts/setup_checker.py --verbose
+
+# Test auto-detection directly
+python ~/.claude/skills/slicer-console/scripts/slicer_detect.py
 ```
 
----
-
-## Troubleshooting
-
-| Symptom | Likely Cause | Fix |
+| Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| `Slicer not found` | Not installed or path not detected | Pass `--slicer-path`, set `SLICER_PATH`, or run `setup_checker.py` |
-| Slicer exits with code 0 but no output | Script syntax error in Slicer's Python 3.12 | Check Python 3.12 compatibility |
-| Script hangs after execution | Slicer window stays open | Use `--mode run` (auto-quit) or `--kill-existing` |
-| `--additional-module-paths` no effect on Linux | AppImage is read-only | Extract AppImage: `./Slicer*.AppImage --appimage-extract && ./squashfs-root/AppRun` |
-| Qt `setParent` / `deleteLater` crash | PythonQt teardown double-free | `layout.removeWidget(w) + w.hide()` instead |
-| `QWidget.layout()` crash | Layout accessed as method | Use `self._layout` member variable |
+| `Slicer not found` | Not installed or not detected | Set `SLICER_PATH`, pass `--slicer-path`, or run `setup_checker.py` |
+| Slicer exits with code 0 but no output | Python 3.12 syntax error | Check script compatibility |
+| Script hangs | Slicer window stays open | Use `--mode run` or `--kill-existing` |
+| Jupyter `NoSuchKernel` | Kernel not registered | Use `--method direct` |
+| Qt `setParent`/`deleteLater` crash | PythonQt double-free | Use `layout.removeWidget(w) + w.hide()` |
+| `QWidget.layout()` crash | Layout is a property | Store layout as `self._layout = qt.QVBoxLayout(self)` |
+| Linux AppImage module paths ignored | AppImage is read-only | Extract first: `./Slicer*.AppImage --appimage-extract` |
 
 ---
 
-## Project Structure
+## Project structure
 
 ```
-slicer-console/
-├── README.md
-├── skill.md                          # Skill documentation (Claude Code)
+~/.claude/skills/slicer-console/
+├── README.md                         # This file
+├── skill.md                          # Claude Code skill manifest
 ├── .gitignore
 ├── references/
-│   └── CHANGELOG.md                  # Version history
-├── scripts/
-│   ├── run_slicer_script.py          # Main CLI entry point
-│   ├── slicer_detect.py              # 9-strategy auto-detection engine
-│   ├── setup_checker.py              # Environment diagnostics
-│   ├── config.json                   # User method preference
-│   └── templates/
-│       ├── segmentation.py           # Volume segmentation template
-│       ├── prediction.py             # ML inference template
-│       └── data_io.py               # Data import/export template
+│   ├── CHANGELOG.md                  # Version history
+│   └── example_script.py             # Example usage
+└── scripts/
+    ├── run_slicer_script.py          # Main CLI entry point
+    ├── slicer_detect.py              # 9-strategy auto-detection engine
+    ├── setup_checker.py              # Environment diagnostics
+    ├── config.json                   # Saved backend preference
+    └── templates/
+        ├── segmentation.py           # Volume segmentation template
+        ├── prediction.py             # ML inference template
+        └── data_io.py                # Data import/export template
 ```
 
 ---
 
 ## Requirements
 
-- **Python 3.8+** (the runner runs in *your* Python, not Slicer's)
+- **Python 3.8+** (the runner runs in your external Python, not Slicer's)
 - **3D Slicer** (any recent version; auto-detected)
-- **`jupyter_client`** — only needed for Jupyter fallback method
+- **`jupyter_client`** — only required for the Jupyter fallback method
 
 ---
 
@@ -267,5 +246,5 @@ MIT — see [LICENSE](LICENSE) (or contact the project owner).
 
 ## Related
 
-- [SlicerAgentController](https://github.com/Kyler389/SlicerAgentController) — Slicer module for AI-assisted segmentation; source of direct `--python-script` method
+- [SlicerAgentController](https://github.com/Kyler389/SlicerAgentController) — Slicer module that inspired the direct `--python-script` approach
 - [3D Slicer Documentation](https://slicer.readthedocs.io/)
