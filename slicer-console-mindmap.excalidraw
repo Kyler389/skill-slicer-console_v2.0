@@ -1,0 +1,1082 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "Claude Code",
+  "elements": [
+    {
+      "id": "center-rect",
+      "type": "rectangle",
+      "x": 740.0,
+      "y": 580.0,
+      "width": 320,
+      "height": 140,
+      "strokeColor": "#1e3a8a",
+      "backgroundColor": "#dbeafe",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "grp-center"
+      ],
+      "frameId": null,
+      "roundness": {
+        "type": 3,
+        "value": 16
+      },
+      "seed": 7387414,
+      "version": 1,
+      "versionNonce": 7387414,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "arrow-center-rect",
+          "type": "arrow"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "center-title",
+      "type": "text",
+      "x": 760.0,
+      "y": 605.0,
+      "width": 280,
+      "height": 40,
+      "text": "🩻 slicer-console",
+      "fontSize": 30,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "top",
+      "strokeColor": "#1e3a8a",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "grp-center"
+      ],
+      "frameId": null,
+      "containerId": null,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "roundness": null,
+      "seed": 8894837,
+      "version": 1,
+      "versionNonce": 8894837,
+      "isDeleted": false
+    },
+    {
+      "id": "center-sub",
+      "type": "text",
+      "x": 760.0,
+      "y": 655.0,
+      "width": 280,
+      "height": 40,
+      "text": "Execute Python scripts in 3D Slicer\nfrom the command line",
+      "fontSize": 16,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "top",
+      "strokeColor": "#374151",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "grp-center"
+      ],
+      "frameId": null,
+      "containerId": null,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "roundness": null,
+      "seed": 8108558,
+      "version": 1,
+      "versionNonce": 8108558,
+      "isDeleted": false
+    },
+    {
+      "id": "methods-rect",
+      "type": "rectangle",
+      "x": 80,
+      "y": 80,
+      "width": 440,
+      "height": 360,
+      "strokeColor": "#065f46",
+      "backgroundColor": "#d1fae5",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "grp-methods"
+      ],
+      "frameId": null,
+      "roundness": {
+        "type": 3,
+        "value": 16
+      },
+      "seed": 3546880,
+      "version": 1,
+      "versionNonce": 3546880,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "arrow-methods-rect",
+          "type": "arrow"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "methods-title",
+      "type": "text",
+      "x": 300.0,
+      "y": 58,
+      "width": 200,
+      "height": 36,
+      "text": "⚡ 执行方法",
+      "fontSize": 22,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#065f46",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "containerId": null,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "roundness": null,
+      "seed": 9329605,
+      "version": 1,
+      "versionNonce": 9329605,
+      "isDeleted": false
+    },
+    {
+      "id": "methods-body",
+      "type": "text",
+      "x": 104,
+      "y": 108,
+      "width": 392,
+      "height": 262,
+      "text": "① Direct Slicer.exe\n   Slicer.exe --no-splash --python-script <path>\n   启动 20–40s · GUI 短暂闪烁 · 最可靠\n\n② PythonSlicer.exe (Headless)\n   PythonSlicer.exe <path>\n   启动 5–15s · 无 GUI · 批量处理首选\n\n③ Jupyter Kernel (Fallback)\n   jupyter_client KernelManager\n   需 SlicerJupyter 扩展 · 备选方案",
+      "fontSize": 15,
+      "fontFamily": 1,
+      "textAlign": "left",
+      "verticalAlign": "top",
+      "strokeColor": "#1f2937",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "grp-methods"
+      ],
+      "frameId": null,
+      "containerId": null,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "roundness": null,
+      "seed": 9967882,
+      "version": 1,
+      "versionNonce": 9967882,
+      "isDeleted": false
+    },
+    {
+      "id": "arrow-methods-rect",
+      "type": "arrow",
+      "x": 900,
+      "y": 650,
+      "width": 600.0,
+      "height": 390.0,
+      "strokeColor": "#34495e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 70,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": {
+        "type": 2
+      },
+      "seed": 4602171,
+      "version": 1,
+      "versionNonce": 4602171,
+      "isDeleted": false,
+      "boundElements": null,
+      "startBinding": {
+        "elementId": "center-rect",
+        "focus": 0.2,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "methods-rect",
+        "focus": 0.5,
+        "gap": 8
+      },
+      "lastCommittedPoint": null,
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -600.0,
+          -390.0
+        ]
+      ]
+    },
+    {
+      "id": "scripts-rect",
+      "type": "rectangle",
+      "x": 1280,
+      "y": 80,
+      "width": 440,
+      "height": 360,
+      "strokeColor": "#581c87",
+      "backgroundColor": "#f3e8ff",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "grp-scripts"
+      ],
+      "frameId": null,
+      "roundness": {
+        "type": 3,
+        "value": 16
+      },
+      "seed": 706719,
+      "version": 1,
+      "versionNonce": 706719,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "arrow-scripts-rect",
+          "type": "arrow"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "scripts-title",
+      "type": "text",
+      "x": 1500.0,
+      "y": 58,
+      "width": 200,
+      "height": 36,
+      "text": "📜 核心脚本",
+      "fontSize": 22,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#581c87",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "containerId": null,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "roundness": null,
+      "seed": 8246458,
+      "version": 1,
+      "versionNonce": 8246458,
+      "isDeleted": false
+    },
+    {
+      "id": "scripts-body",
+      "type": "text",
+      "x": 1304,
+      "y": 108,
+      "width": 392,
+      "height": 328,
+      "text": "run_slicer_script.py\n   统一 CLI 入口\n   --mode run|launch\n   --method auto|direct|pythonslicer|jupyter\n\nslicer_detect.py\n   9 策略跨平台自动检测引擎\n   环境变量 → 注册表 → PATH → 全盘扫描\n\nsetup_checker.py\n   环境诊断 · --verbose 详情 · --fix 自动修复\n\nconfig.json\n   持久化用户首选 method，可用 --method 覆盖",
+      "fontSize": 15,
+      "fontFamily": 1,
+      "textAlign": "left",
+      "verticalAlign": "top",
+      "strokeColor": "#1f2937",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "grp-scripts"
+      ],
+      "frameId": null,
+      "containerId": null,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "roundness": null,
+      "seed": 4543642,
+      "version": 1,
+      "versionNonce": 4543642,
+      "isDeleted": false
+    },
+    {
+      "id": "arrow-scripts-rect",
+      "type": "arrow",
+      "x": 900,
+      "y": 650,
+      "width": 600.0,
+      "height": 390.0,
+      "strokeColor": "#34495e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 70,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": {
+        "type": 2
+      },
+      "seed": 1378734,
+      "version": 1,
+      "versionNonce": 1378734,
+      "isDeleted": false,
+      "boundElements": null,
+      "startBinding": {
+        "elementId": "center-rect",
+        "focus": 0.2,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "scripts-rect",
+        "focus": 0.5,
+        "gap": 8
+      },
+      "lastCommittedPoint": null,
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          600.0,
+          -390.0
+        ]
+      ]
+    },
+    {
+      "id": "features-rect",
+      "type": "rectangle",
+      "x": 80,
+      "y": 520,
+      "width": 440,
+      "height": 320,
+      "strokeColor": "#92400e",
+      "backgroundColor": "#fef3c7",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "grp-features"
+      ],
+      "frameId": null,
+      "roundness": {
+        "type": 3,
+        "value": 16
+      },
+      "seed": 2485585,
+      "version": 1,
+      "versionNonce": 2485585,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "arrow-features-rect",
+          "type": "arrow"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "features-title",
+      "type": "text",
+      "x": 300.0,
+      "y": 498,
+      "width": 200,
+      "height": 36,
+      "text": "⭐ 核心功能",
+      "fontSize": 22,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#92400e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "containerId": null,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "roundness": null,
+      "seed": 8486177,
+      "version": 1,
+      "versionNonce": 8486177,
+      "isDeleted": false
+    },
+    {
+      "id": "features-body",
+      "type": "text",
+      "x": 104,
+      "y": 548,
+      "width": 392,
+      "height": 196,
+      "text": "✓ 结构化输出：$SLICER_RESULT_FILE 环境变量\n✓ 9 策略自动检测：Win / macOS / Linux\n✓ 双运行模式：run（执行退出） / launch（保持 GUI）\n✓ 自动退出 + 300s 超时保护\n✓ 进度心跳：每 15s 反馈状态\n✓ 僵尸进程清理：--kill-existing\n✓ 外部模块加载：--module-paths / --select-module\n✓ 方法持久化：config.json 保存偏好",
+      "fontSize": 15,
+      "fontFamily": 1,
+      "textAlign": "left",
+      "verticalAlign": "top",
+      "strokeColor": "#1f2937",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "grp-features"
+      ],
+      "frameId": null,
+      "containerId": null,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "roundness": null,
+      "seed": 8226437,
+      "version": 1,
+      "versionNonce": 8226437,
+      "isDeleted": false
+    },
+    {
+      "id": "arrow-features-rect",
+      "type": "arrow",
+      "x": 900,
+      "y": 650,
+      "width": 600.0,
+      "height": 30.0,
+      "strokeColor": "#34495e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 70,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": {
+        "type": 2
+      },
+      "seed": 1525699,
+      "version": 1,
+      "versionNonce": 1525699,
+      "isDeleted": false,
+      "boundElements": null,
+      "startBinding": {
+        "elementId": "center-rect",
+        "focus": 0.2,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "features-rect",
+        "focus": 0.5,
+        "gap": 8
+      },
+      "lastCommittedPoint": null,
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -600.0,
+          30.0
+        ]
+      ]
+    },
+    {
+      "id": "templates-rect",
+      "type": "rectangle",
+      "x": 1280,
+      "y": 520,
+      "width": 440,
+      "height": 320,
+      "strokeColor": "#1e40af",
+      "backgroundColor": "#dbeafe",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "grp-templates"
+      ],
+      "frameId": null,
+      "roundness": {
+        "type": 3,
+        "value": 16
+      },
+      "seed": 4707940,
+      "version": 1,
+      "versionNonce": 4707940,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "arrow-templates-rect",
+          "type": "arrow"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "templates-title",
+      "type": "text",
+      "x": 1500.0,
+      "y": 498,
+      "width": 200,
+      "height": 36,
+      "text": "📋 脚本模板",
+      "fontSize": 22,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#1e40af",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "containerId": null,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "roundness": null,
+      "seed": 9984962,
+      "version": 1,
+      "versionNonce": 9984962,
+      "isDeleted": false
+    },
+    {
+      "id": "templates-body",
+      "type": "text",
+      "x": 1304,
+      "y": 548,
+      "width": 392,
+      "height": 196,
+      "text": "segmentation.py\n   加载体积 → 阈值分割 → 导出 .seg.nrrd\n\nprediction.py\n   ML 推理管道占位 · 体积 I/O 示例\n\ndata_io.py\n   场景列表 · 节点导出/导入 · 体积 I/O",
+      "fontSize": 15,
+      "fontFamily": 1,
+      "textAlign": "left",
+      "verticalAlign": "top",
+      "strokeColor": "#1f2937",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "grp-templates"
+      ],
+      "frameId": null,
+      "containerId": null,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "roundness": null,
+      "seed": 6406460,
+      "version": 1,
+      "versionNonce": 6406460,
+      "isDeleted": false
+    },
+    {
+      "id": "arrow-templates-rect",
+      "type": "arrow",
+      "x": 900,
+      "y": 650,
+      "width": 600.0,
+      "height": 30.0,
+      "strokeColor": "#34495e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 70,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": {
+        "type": 2
+      },
+      "seed": 8585898,
+      "version": 1,
+      "versionNonce": 8585898,
+      "isDeleted": false,
+      "boundElements": null,
+      "startBinding": {
+        "elementId": "center-rect",
+        "focus": 0.2,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "templates-rect",
+        "focus": 0.5,
+        "gap": 8
+      },
+      "lastCommittedPoint": null,
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          600.0,
+          30.0
+        ]
+      ]
+    },
+    {
+      "id": "conventions-rect",
+      "type": "rectangle",
+      "x": 80,
+      "y": 920,
+      "width": 440,
+      "height": 320,
+      "strokeColor": "#991b1b",
+      "backgroundColor": "#fee2e2",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "grp-conventions"
+      ],
+      "frameId": null,
+      "roundness": {
+        "type": 3,
+        "value": 16
+      },
+      "seed": 3631162,
+      "version": 1,
+      "versionNonce": 3631162,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "arrow-conventions-rect",
+          "type": "arrow"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "conventions-title",
+      "type": "text",
+      "x": 300.0,
+      "y": 898,
+      "width": 200,
+      "height": 36,
+      "text": "📐 脚本规范",
+      "fontSize": 22,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#991b1b",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "containerId": null,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "roundness": null,
+      "seed": 3420924,
+      "version": 1,
+      "versionNonce": 3420924,
+      "isDeleted": false
+    },
+    {
+      "id": "conventions-body",
+      "type": "text",
+      "x": 104,
+      "y": 948,
+      "width": 392,
+      "height": 196,
+      "text": "· 使用绝对路径读写文件\n· 关键输出用 print(\"RESULT:\", value)\n· 复杂结果写入 $SLICER_RESULT_FILE（JSON）\n· API 失败时降级到 slicer.modules.*.logic()\n· --python-script 模式避免对话框阻塞\n· PythonSlicer 模式无 GUI，VTK render 不可用\n· PythonQt 属性 vs 方法：QWidget.layout 等是属性\n· 禁止 setParent(None)+deleteLater()，防 double-free",
+      "fontSize": 15,
+      "fontFamily": 1,
+      "textAlign": "left",
+      "verticalAlign": "top",
+      "strokeColor": "#1f2937",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "grp-conventions"
+      ],
+      "frameId": null,
+      "containerId": null,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "roundness": null,
+      "seed": 3705028,
+      "version": 1,
+      "versionNonce": 3705028,
+      "isDeleted": false
+    },
+    {
+      "id": "arrow-conventions-rect",
+      "type": "arrow",
+      "x": 900,
+      "y": 650,
+      "width": 600.0,
+      "height": 430.0,
+      "strokeColor": "#34495e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 70,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": {
+        "type": 2
+      },
+      "seed": 1998029,
+      "version": 1,
+      "versionNonce": 1998029,
+      "isDeleted": false,
+      "boundElements": null,
+      "startBinding": {
+        "elementId": "center-rect",
+        "focus": 0.2,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "conventions-rect",
+        "focus": 0.5,
+        "gap": 8
+      },
+      "lastCommittedPoint": null,
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -600.0,
+          430.0
+        ]
+      ]
+    },
+    {
+      "id": "diagnostics-rect",
+      "type": "rectangle",
+      "x": 1280,
+      "y": 920,
+      "width": 440,
+      "height": 320,
+      "strokeColor": "#713f12",
+      "backgroundColor": "#fef9c3",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "grp-diagnostics"
+      ],
+      "frameId": null,
+      "roundness": {
+        "type": 3,
+        "value": 16
+      },
+      "seed": 7085583,
+      "version": 1,
+      "versionNonce": 7085583,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "arrow-diagnostics-rect",
+          "type": "arrow"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "diagnostics-title",
+      "type": "text",
+      "x": 1500.0,
+      "y": 898,
+      "width": 200,
+      "height": 36,
+      "text": "🔍 诊断与排错",
+      "fontSize": 22,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "strokeColor": "#713f12",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [],
+      "frameId": null,
+      "containerId": null,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "roundness": null,
+      "seed": 9291260,
+      "version": 1,
+      "versionNonce": 9291260,
+      "isDeleted": false
+    },
+    {
+      "id": "diagnostics-body",
+      "type": "text",
+      "x": 1304,
+      "y": 948,
+      "width": 392,
+      "height": 240,
+      "text": "诊断命令：\n   python setup_checker.py\n   python slicer_detect.py\n\n常见问题：\n   Slicer not found → 设置 SLICER_PATH / SLICER_ROOT\n   退出码 0 无输出 → 检查 Python 3.12 语法兼容\n   脚本挂起 → --mode run 自动退出 / --kill-existing\n   Qt 崩溃 → layout.removeWidget(w) + w.hide()\n   AppImage 模块无效 → 先解压 AppImage",
+      "fontSize": 15,
+      "fontFamily": 1,
+      "textAlign": "left",
+      "verticalAlign": "top",
+      "strokeColor": "#1f2937",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "grp-diagnostics"
+      ],
+      "frameId": null,
+      "containerId": null,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "roundness": null,
+      "seed": 6371382,
+      "version": 1,
+      "versionNonce": 6371382,
+      "isDeleted": false
+    },
+    {
+      "id": "arrow-diagnostics-rect",
+      "type": "arrow",
+      "x": 900,
+      "y": 650,
+      "width": 600.0,
+      "height": 430.0,
+      "strokeColor": "#34495e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 70,
+      "groupIds": [],
+      "frameId": null,
+      "roundness": {
+        "type": 2
+      },
+      "seed": 8506985,
+      "version": 1,
+      "versionNonce": 8506985,
+      "isDeleted": false,
+      "boundElements": null,
+      "startBinding": {
+        "elementId": "center-rect",
+        "focus": 0.2,
+        "gap": 8
+      },
+      "endBinding": {
+        "elementId": "diagnostics-rect",
+        "focus": 0.5,
+        "gap": 8
+      },
+      "lastCommittedPoint": null,
+      "startArrowhead": null,
+      "endArrowhead": "arrow",
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          600.0,
+          430.0
+        ]
+      ]
+    },
+    {
+      "id": "legend-rect",
+      "type": "rectangle",
+      "x": 600,
+      "y": 1280,
+      "width": 600,
+      "height": 100,
+      "strokeColor": "#4b5563",
+      "backgroundColor": "#f9fafb",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "legend"
+      ],
+      "frameId": null,
+      "roundness": {
+        "type": 3,
+        "value": 16
+      },
+      "seed": 7133136,
+      "version": 1,
+      "versionNonce": 7133136,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "id": "arrow-legend-rect",
+          "type": "arrow"
+        }
+      ],
+      "updated": 1,
+      "link": null,
+      "locked": false
+    },
+    {
+      "id": "legend-title",
+      "type": "text",
+      "x": 620,
+      "y": 1292,
+      "width": 200,
+      "height": 28,
+      "text": "📌 使用方式",
+      "fontSize": 18,
+      "fontFamily": 1,
+      "textAlign": "left",
+      "verticalAlign": "top",
+      "strokeColor": "#374151",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "legend"
+      ],
+      "frameId": null,
+      "containerId": null,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "roundness": null,
+      "seed": 6787266,
+      "version": 1,
+      "versionNonce": 6787266,
+      "isDeleted": false
+    },
+    {
+      "id": "legend-body",
+      "type": "text",
+      "x": 620,
+      "y": 1322,
+      "width": 560,
+      "height": 48,
+      "text": "python run_slicer_script.py --mode run --script ./.slicer_temp/task.py\n模板调用：python run_slicer_script.py --mode run --script scripts/templates/segmentation.py",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "left",
+      "verticalAlign": "top",
+      "strokeColor": "#4b5563",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "roughness": 1,
+      "opacity": 100,
+      "groupIds": [
+        "legend"
+      ],
+      "frameId": null,
+      "containerId": null,
+      "boundElements": null,
+      "link": null,
+      "locked": false,
+      "roundness": null,
+      "seed": 6436394,
+      "version": 1,
+      "versionNonce": 6436394,
+      "isDeleted": false
+    }
+  ],
+  "appState": {
+    "gridSize": 20,
+    "gridStep": 5,
+    "gridModeEnabled": false,
+    "viewBackgroundColor": "#ffffff",
+    "theme": "light",
+    "zoom": {
+      "value": 0.7
+    },
+    "offsetLeft": 0,
+    "offsetTop": 0
+  },
+  "files": {}
+}
