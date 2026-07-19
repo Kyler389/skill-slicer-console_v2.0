@@ -4,6 +4,8 @@ A [Claude Code Skill](https://claude.ai/code) that lets you execute Python scrip
 
 It provides a unified runner with three execution backends, cross-platform auto-detection, structured output capture, and ready-to-use templates for segmentation, inference, and data I/O.
 
+![slicer-console mindmap overview](references/slicer-console-mindmap.png)
+
 ---
 
 ## Install this skill in your Claude Code agent
