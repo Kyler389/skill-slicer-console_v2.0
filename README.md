@@ -1,33 +1,26 @@
 # slicer-console
 
-A [Claude Code Skill](https://claude.ai/code) that lets you execute Python scripts inside **3D Slicer** from the command line.
+**slicer-console** is a command-line tool that executes Python scripts inside **3D Slicer** from the terminal — no GUI clicks required.
 
-It provides a unified runner with three execution backends, cross-platform auto-detection, structured output capture, and ready-to-use templates for segmentation, inference, and data I/O.
+It provides a unified runner with three execution backends, cross-platform auto-detection, structured output capture, and ready-to-use templates for segmentation, inference, and data I/O. Any AI coding agent that can run shell commands can leverage it.
 
 ![slicer-console mindmap overview](references/slicer-console-mindmap.png)
 
 ---
 
-## Install this skill in your Claude Code agent
+## Quick start
 
-### 1. Clone into your skills directory
+### 1. Clone the repository
 
 ```bash
-# macOS / Linux
-git clone git@github.com:Kyler389/skill-slicer-console_v2.0.git \
-  ~/.claude/skills/slicer-console
-
-# Windows (PowerShell)
-git clone git@github.com:Kyler389/skill-slicer-console_v2.0.git `
-  "$env:USERPROFILE\.claude\skills\slicer-console"
+# Clone anywhere — this path is just a recommendation
+git clone git@github.com:Kyler389/skill-slicer-console_v2.0.git /path/to/slicer-console
 ```
-
-> **Note:** The directory name under `~/.claude/skills/` must be `slicer-console` so Claude Code recognizes the skill.
 
 ### 2. Verify your environment
 
 ```bash
-cd ~/.claude/skills/slicer-console/scripts
+cd /path/to/slicer-console/scripts
 python setup_checker.py
 ```
 
@@ -47,34 +40,37 @@ Allowed values: `direct`, `pythonslicer`, `jupyter`. You can always override wit
 
 ## How to use
 
-Once installed, mention Slicer in Claude Code and the skill will be activated, for example:
+There are two ways to use slicer-console:
 
-> "Run a Slicer script that lists all volumes in the scene."
-> "Use slicer python to threshold this volume and save the segmentation."
+### A. Direct CLI (any agent or terminal)
 
-Claude Code will then:
-
-1. Write a Python script to `./.slicer_temp/task_<timestamp>.py` in your current working directory.
-2. Invoke `scripts/run_slicer_script.py` with the configured backend.
-3. Return the script output and the script path.
-
-### Manual CLI usage
+Call the runner directly from any shell:
 
 ```bash
-# Run a script and exit
-python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py \
-  --mode run --script ./.slicer_temp/task_001.py
-
-# Launch Slicer GUI with a custom module
-python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py \
-  --mode launch \
-  --module-paths "F:/slicer_module/SlicerAgentController" \
-  --select-module SlicerAgentController
-
-# Headless batch execution
-python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py \
-  --mode run --method pythonslicer --script task.py
+python /path/to/slicer-console/scripts/run_slicer_script.py \
+  --mode run --script ./my_slicer_script.py
 ```
+
+See the [CLI options](#common-cli-options) below for full control.
+
+### B. Via an AI coding agent
+
+Tell your agent you want to run something in Slicer, for example:
+
+> "Run a Slicer script that lists all volumes in the scene."
+> "Use Slicer to segment this volume and save the result."
+
+A capable agent will:
+
+1. Write a Python script using the Slicer Python API.
+2. Save it to a temporary path (e.g. `./.slicer_temp/task_<timestamp>.py`).
+3. Execute it via `run_slicer_script.py --mode run --script <path>`.
+4. Return the output and the script path to you.
+
+> **Agent-specific setup** (for tools that support skill manifests):
+>
+> - **Claude Code** — Clone into `~/.claude/skills/slicer-console/` and the bundled `skill.md` activates automatically on Slicer-related queries.
+> - **Other agents** — Most agents can invoke `run_slicer_script.py` directly once they know the path. Add the scripts directory to your agent's context or tool configuration if supported.
 
 ### Common CLI options
 
@@ -166,8 +162,8 @@ Located in `scripts/templates/`:
 | Data I/O | `data_io.py` | Scene listing, volume export/import |
 
 ```bash
-python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py \
-  --mode run --script ~/.claude/skills/slicer-console/scripts/templates/segmentation.py
+python /path/to/slicer-console/scripts/run_slicer_script.py \
+  --mode run --script /path/to/slicer-console/scripts/templates/segmentation.py
 ```
 
 ---
@@ -175,7 +171,7 @@ python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py \
 ## Scripting conventions
 
 - **Absolute paths** for input/output files.
-- **Print with `RESULT:` prefix** for easy parsing.
+- **Print with `RESULT:` prefix** for easy parsing by both humans and agents.
 - **Write structured results** to `$SLICER_RESULT_FILE`.
 - **API fallback:** if a direct Slicer API raises `AttributeError`, try `slicer.modules.<moduleName>.logic()`.
 - **No GUI dialogs** in `--python-script` mode — they block execution.
@@ -188,13 +184,13 @@ python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py \
 
 ```bash
 # Quick environment check
-python ~/.claude/skills/slicer-console/scripts/setup_checker.py
+python /path/to/slicer-console/scripts/setup_checker.py
 
 # Detailed detection report
-python ~/.claude/skills/slicer-console/scripts/setup_checker.py --verbose
+python /path/to/slicer-console/scripts/setup_checker.py --verbose
 
 # Test auto-detection directly
-python ~/.claude/skills/slicer-console/scripts/slicer_detect.py
+python /path/to/slicer-console/scripts/slicer_detect.py
 ```
 
 | Symptom | Likely cause | Fix |
@@ -212,12 +208,13 @@ python ~/.claude/skills/slicer-console/scripts/slicer_detect.py
 ## Project structure
 
 ```
-~/.claude/skills/slicer-console/
+/path/to/slicer-console/
 ├── README.md                         # This file
-├── skill.md                          # Claude Code skill manifest
+├── skill.md                          # AI agent skill manifest (Claude Code)
 ├── .gitignore
 ├── references/
 │   ├── CHANGELOG.md                  # Version history
+│   ├── slicer-console-mindmap.png    # Overview mindmap
 │   └── example_script.py             # Example usage
 └── scripts/
     ├── run_slicer_script.py          # Main CLI entry point
