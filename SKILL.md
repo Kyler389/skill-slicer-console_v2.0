@@ -24,6 +24,55 @@ The runner script auto-detects which method to use:
 - **Method 2**: For lightweight scripts that only need Slicer Python APIs without GUI.
 - **Method 3**: When you need headless + don't want a new Slicer process each time.
 
+## 核心流程准则 (Core Workflow Guidelines)
+
+为提升执行效率，使用本 skill 时**必须**遵循以下流程：
+
+### 1. 先启动 Slicer，再执行脚本
+
+**禁止**每次需要执行命令时都重新启动一个新 Slicer 进程（20–40s 启动时间浪费严重）。
+
+| 阶段 | 操作 | 说明 |
+|------|------|------|
+| **首次** | `--mode launch` 启动 Slicer 并保持打开 | Slicer GUI 启动后保持运行 |
+| **后续** | 利用**同一 Slicer 实例**的 Python Console 执行脚本 | 避免重复启动开销 |
+| **收尾** | 执行完毕清理临时脚本（除非可复用） | 见下方清理规则 |
+
+### 2. Python Console 执行方式
+
+脚本通过 **Slicer Python Console**（Slicer 内置交互式 Python 解释器）执行：
+
+- **`--python-script`（推荐）**：通过 `Slicer.exe --python-script <script>` 将脚本送入 Python Console 执行。首次用 `--mode launch` 启动 Slicer，后续对于需要大量交互的新会话再用 `run` 模式（但仍会启动新进程——属于第二阶段优化目标）。
+- **Jupyter kernel**：对于已启动的 Slicer，若安装了 SlicerJupyter 扩展，可通过 `--method jupyter` 向运行中的 Python Console 发送代码，**完全免重启**。（最佳效率，但需额外配置）
+
+> 目标：**一次启动，多次执行**。后续版本可考虑为运行中的 Slicer 添加 socket/IPC 监听机制，实现真正的免重启脚本注入。
+
+### 3. 临时脚本清理规则
+
+所有写入 `.slicer_temp/` 的脚本**执行完毕后必须清理**，除非标记为可复用：
+
+| 条件 | 处理方式 |
+|------|----------|
+| 一次性任务（计算/转换/查询） | 执行后**立即删除** `.slicer_temp/task_*.py` |
+| 可复用模板（通用流程/工具函数） | **迁移**到 `scripts/templates/` 并命名意义明确 |
+| 用户明确要求保留 | 保留并告知用户路径 |
+
+清理命令示例：
+```bash
+# 清理所有临时脚本
+rm -f ./.slicer_temp/task_*.py
+# 或清理单个
+rm -f ./.slicer_temp/task_<timestamp>.py
+```
+
+### 4. 关于 `--mode launch` 的正确使用
+
+- `--mode launch` 用于**长期保持 Slicer 运行**，适合需要多次执行脚本的会话
+- `--mode run` 用于**执行脚本后自动退出**，适合单次一次性任务
+- 建议：skill 被调用时如果预期会执行多次命令**优先使用 launch 模式启动**
+
+---
+
 ## Action
 
 ### 0. Method Selection (First-Time Only)
