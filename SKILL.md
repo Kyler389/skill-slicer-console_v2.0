@@ -49,19 +49,23 @@ The runner script auto-detects which method to use:
 
 ### 3. 临时脚本清理规则
 
-所有写入 `.slicer_temp/` 的脚本**执行完毕后必须清理**，除非标记为可复用：
+所有写入 `.slicer_temp/` 的脚本**执行完毕后延迟清理**，避免占用用户交互通道：
 
 | 条件 | 处理方式 |
 |------|----------|
-| 一次性任务（计算/转换/查询） | 执行后**立即删除** `.slicer_temp/task_*.py` |
+| 一次性任务（计算/转换/查询） | 执行后告知用户"已完成"，**设 300s 延迟删除** `.slicer_temp/task_*.py` |
 | 可复用模板（通用流程/工具函数） | **迁移**到 `scripts/templates/` 并命名意义明确 |
 | 用户明确要求保留 | 保留并告知用户路径 |
 
+> 原则：**跑完脚本 → 告知用户完成 → 设延迟清理 → 暂停等反馈**。不占用通道做额外操作。
+
 清理命令示例：
 ```bash
-# 清理所有临时脚本
+# 延迟 300s 后清理所有临时脚本
+(at +300s) rm -f ./.slicer_temp/task_*.py
+# 或立即清理
 rm -f ./.slicer_temp/task_*.py
-# 或清理单个
+# 清理单个
 rm -f ./.slicer_temp/task_<timestamp>.py
 ```
 
@@ -70,6 +74,46 @@ rm -f ./.slicer_temp/task_<timestamp>.py
 - `--mode launch` 用于**长期保持 Slicer 运行**，适合需要多次执行脚本的会话
 - `--mode run` 用于**执行脚本后自动退出**，适合单次一次性任务
 - 建议：skill 被调用时如果预期会执行多次命令**优先使用 launch 模式启动**
+
+### 5. 进度反馈与后台执行
+
+对于耗时操作（DICOM 导入、批量分割等），**禁止**阻塞等待不反馈。必须遵循以下规则：
+
+| 场景 | 操作 |
+|------|------|
+| **预计 < 15s 的短任务** | 直接 `--mode run` 同步执行，等待完成 |
+| **预计 ≥ 15s 的长任务** | **必须**用 `run_in_background=true` 启动 runner，然后通过 TaskOutput 轮询进度 |
+| **用户看到 Slicer 窗口后询问** | 立即告知当前进度，不要让用户对着窗口干等 |
+
+脚本内建议写入进度文件供轮询读取：
+```python
+import json, os, time
+PROGRESS_FILE = os.path.join(os.path.dirname(__file__), "progress.json")
+
+def report_progress(current, total, stage=""):
+    data = {"current": current, "total": total, "stage": stage}
+    with open(PROGRESS_FILE, "w") as f:
+        json.dump(data, f)
+    pct = current / total * 100 if total > 0 else 0
+    print(f"[进度] {stage}: {current}/{total} ({pct:.0f}%)")
+```
+
+Agent 侧轮询示例：
+```python
+# 后台执行长任务
+bash(..., run_in_background=true)
+
+# 每 15s 检查进度
+task_output(...)  # 查看进度文件内容
+```
+
+### 6. `--kill-existing` 默认行为
+
+`--mode run` 时，runner 默认对已有 Slicer 进程执行 `--kill-existing`（避免前次异常退出导致新进程挂起）。
+
+`--mode launch` 时保持默认不杀。
+
+如果用户显式传 `--no-kill-existing` 则跳过。
 
 ---
 
@@ -99,6 +143,7 @@ Before executing any script, check the saved configuration:
 ### 1. Write Script
 
 1. **Write a Python script** that solves the user's request using `slicer`, `vtk`, `mrml`, and related Slicer APIs.
+   - 对于预计 ≥ 15s 的**长任务**，脚本内必须写入进度反馈（见上方第 5 节），并支持 `SLICER_RESULT_FILE` 输出。
 2. **Save the script** to `./.slicer_temp/task_<timestamp>.py`. Create the `.slicer_temp` directory if it does not exist.
 3. **Run the script** using the unified connector:
    ```bash
@@ -117,8 +162,11 @@ Before executing any script, check the saved configuration:
    - `--kernel slicer-5.6` — kernel name for jupyter method (default: slicer-5.6)
    - `--timeout 300` — timeout in seconds (default: 300)
    - `--version` — detect and print Slicer version (without launching Slicer)
-   - `--kill-existing` — kill running Slicer processes before starting
+   - `--kill-existing` — kill running Slicer processes before starting (--mode run 时默认启用)
+   - `--no-kill-existing` — 跳过杀掉已有 Slicer 进程
 4. **Return the output** to the user and report the script path.
+   - 如果 runner 输出被截断，优先展示 `SLICER_RESULT_FILE` 的结构化结果（如果有）。
+   - **执行完毕后**：告知用户结果 → 设 300s 延迟清理临时脚本 → **暂停等用户反馈**。不要继续做额外操作（检查、轮询、清理等）。
 
 ### Examples
 
@@ -134,6 +182,12 @@ python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py --mode run -
 
 # Jupyter kernel fallback
 python ~/.claude/skills/slicer-console/scripts/run_slicer_script.py --mode run --method jupyter --script ./.slicer_temp/task_001.py --kernel slicer-5.6
+
+# 长任务后台执行（避免阻塞）
+bash(description="Slicer DICOM import", run_in_background=true, timeout=600)  # 用 Bash 的 run_in_background
+# 之后轮询进度
+task_output(task_id="...", block=false)  # 非阻塞查看 stdout + progress.json
+task_output(task_id="...", block=true)   # 阻塞等待完成
 ```
 
 ## Scripting Conventions
@@ -150,7 +204,7 @@ Use `print("RESULT:", value)` so the caller can easily parse key outputs.
 For reliable output capture (especially on Windows where GUI app stdout can be lost),
 the runner sets the `SLICER_RESULT_FILE` environment variable pointing to a temp file.
 Scripts can write structured results there, and the runner will read and display them
-after Slicer exits:
+after Slicer exits. **Runner 会在 stdout 最前面展示 result 文件内容**（而非混在冗长输出中间）。
 
 ```python
 import os, json
@@ -158,6 +212,30 @@ result_file = os.environ.get("SLICER_RESULT_FILE")
 if result_file:
     with open(result_file, "w") as f:
         f.write(json.dumps({"status": "ok", "volume": "Sample"}))
+```
+
+### Progress reporting for long tasks
+
+对于预计 ≥ 15s 的耗时操作，脚本内应写入进度文件以供轮询：
+
+```python
+import json, os, time
+
+PROGRESS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "progress.json")
+
+def report_progress(current, total, stage=""):
+    data = {"current": current, "total": total, "stage": stage}
+    with open(PROGRESS_PATH, "w") as f:
+        json.dump(data, f)
+    pct = current / total * 100 if total > 0 else 0
+    print(f"[进度] {stage}: {current}/{total} ({pct:.0f}%)")
+    time.sleep(0.05)  # 确保文件 flush
+
+# 使用示例
+items = [list of something]
+for i, item in enumerate(items):
+    process(item)
+    report_progress(i + 1, len(items), "正在导入 DICOM 系列")
 ```
 
 ### API fallback patterns
@@ -267,6 +345,7 @@ The runner script runs in your external Python (not Slicer's Python). It needs:
 | `ModuleNotFoundError: No module named 'IPython'` | Jupyter method without IPython in Slicer's Python | Use `--method direct` instead, or install IPython in Slicer Python |
 | `NoSuchKernel: No such kernel named slicer-5.6` | Jupyter kernel not registered | Use `--method direct` instead (recommended) |
 | Script hangs after execution | Slicer window stays open | Use `--mode run` (auto-quits). Or pass `--no-quit` to keep open intentionally. |
+| **Runner 超时，Slicer 窗口还在** | 任务耗时超过 `--timeout` | **Slicer 可能仍在运行**，去任务管理器手动关闭 Slicer.exe。下次调大 `--timeout` |
 | Qt errors about `setParent` / `deleteLater` | PythonQt teardown double-free | Use `layout.removeWidget(w) + w.hide()` instead |
 | `--additional-module-paths` has no effect on Linux | AppImage is read-only filesystem | Extract AppImage first: `./Slicer*.AppImage --appimage-extract && ./squashfs-root/AppRun` |
 | `AttributeError` on slicer API | Using C++ method that moved | Fall back to `slicer.modules.*.logic()` or `slicer.util.*` |

@@ -32,6 +32,22 @@ import slicer_detect
 import shutil
 
 
+# ── Safe print for CJK Windows consoles ──
+
+def safe_print(text, file=None, end="\n"):
+    """Print text safely even when it contains characters not representable in the console encoding."""
+    out = file or sys.stdout
+    encoding = out.encoding or "utf-8"
+    try:
+        # Replace characters that the console encoding can't handle
+        cleaned = text.encode(encoding, errors="replace").decode(encoding, errors="replace")
+        print(cleaned, file=file, end=end)
+    except Exception:
+        # Last resort: strip to ASCII
+        safe = text.encode("ascii", errors="replace").decode("ascii", errors="replace")
+        print(safe, file=file, end=end)
+
+
 # ── Config persistence ────────────────────────────────────────────────
 
 _CONFIG_PATH = os.path.join(_SCRIPT_DIR, "config.json")
@@ -207,12 +223,54 @@ def run_direct(script_path, slicer_exe, timeout, module_paths=None, quit_after=T
 
     start = time.time()
 
-    # Background monitor — prints heartbeat every 15s while Slicer loads
+    # ── Progress file polling ──
+    # Check if the script writes progress.json in its own directory
+    # (check both the original script dir AND the prepared temp dir)
+    script_dir = os.path.dirname(os.path.abspath(script_path))
+    safe_script_dir = os.path.dirname(os.path.abspath(safe_script))
+    progress_paths = list(dict.fromkeys([
+        os.path.join(script_dir, "progress.json"),
+        os.path.join(safe_script_dir, "progress.json"),
+    ]))
+    _last_progress_content = None
+
+    def _poll_progress():
+        nonlocal _last_progress_content
+        try:
+            found = False
+            for pp in progress_paths:
+                if os.path.exists(pp):
+                    with open(pp, "r") as f:
+                        content = f.read().strip()
+                    if content and content != _last_progress_content:
+                        _last_progress_content = content
+                        try:
+                            data = json.loads(content)
+                            stage = data.get("stage", "")
+                            cur = data.get("current", 0)
+                            total = data.get("total", 0)
+                            pct = f" ({cur/total*100:.0f}%)" if total > 0 else ""
+                            print(f"[进度] {stage}: {cur}/{total}{pct}")
+                        except json.JSONDecodeError:
+                            print(f"[进度] {content}")
+                    found = True
+                    break
+        except Exception:
+            pass
+
+    # Initial check
+    _poll_progress()
+
+    # Background monitor — prints heartbeat every 15s AND polls progress
     _stop_monitor = threading.Event()
     def _heartbeat():
-        while not _stop_monitor.wait(15):
-            t = int(time.time() - start)
-            print(f"[INFO] Slicer still running... ({t}s / {timeout}s)")
+        tick = 0
+        while not _stop_monitor.wait(5):  # Check every 5s instead of 15s
+            tick += 1
+            elapsed_t = int(time.time() - start)
+            if tick % 3 == 0:  # Print heartbeat every 15s (3 * 5s)
+                print(f"[INFO] Slicer still running... ({elapsed_t}s / {timeout}s)")
+            _poll_progress()
     _heartbeat_thread = threading.Thread(target=_heartbeat, daemon=True)
     _heartbeat_thread.start()
 
@@ -235,7 +293,14 @@ def run_direct(script_path, slicer_exe, timeout, module_paths=None, quit_after=T
             f"\n[ERROR] Slicer timed out after {elapsed:.0f}s (limit: {timeout}s).",
             file=sys.stderr,
         )
-        print("[INFO] The script or Slicer GUI may still be running.", file=sys.stderr)
+        print(
+            "[HINT] Slicer may still be running. Check Task Manager and manually close Slicer.exe if needed.",
+            file=sys.stderr,
+        )
+        print(
+            "[HINT] Increase --timeout for longer tasks, or split the script into smaller steps.",
+            file=sys.stderr,
+        )
         _kill_slicer(slicer_exe)
         print(f"[INFO] Execution failed — timed out. Exit code: 124")
         return 124
@@ -244,9 +309,25 @@ def run_direct(script_path, slicer_exe, timeout, module_paths=None, quit_after=T
     _heartbeat_thread.join(timeout=2)
     elapsed = time.time() - start
 
-    # Print captured output
+    # Read SLICER_RESULT_FILE first (before stdout, so it isn't lost in truncation)
+    result_content = None
+    if os.path.exists(result_file_path):
+        try:
+            with open(result_file_path, "r", encoding="utf-8") as f:
+                result_content = f.read().strip()
+            os.remove(result_file_path)
+        except Exception as e:
+            print(f"[WARN] Could not read $SLICER_RESULT_FILE: {e}", file=sys.stderr)
+
+    # Print structured result prominently (if present)
+    if result_content:
+        safe_print("[RESULT] Script output via $SLICER_RESULT_FILE:")
+        safe_print(result_content)
+        safe_print("--- end $SLICER_RESULT_FILE ---")
+
+    # Print captured stdout/stderr (with safe encoding for CJK Windows console)
     if proc.stdout:
-        print(proc.stdout)
+        safe_print(proc.stdout)
     if proc.stderr:
         stderr_lower = proc.stderr.lower()
         is_error = any(
@@ -254,24 +335,12 @@ def run_direct(script_path, slicer_exe, timeout, module_paths=None, quit_after=T
             for kw in ["error", "traceback", "exception", "failed"]
         )
         if is_error:
-            print(proc.stderr, file=sys.stderr)
+            safe_print(proc.stderr, file=sys.stderr)
         else:
-            print(proc.stderr)
+            safe_print(proc.stderr)
 
     exit_code = proc.returncode
     print(f"\n[INFO] Execution finished in {elapsed:.1f}s. Exit code: {exit_code}")
-
-    # Read SLICER_RESULT_FILE if the script wrote structured output
-    if os.path.exists(result_file_path):
-        try:
-            with open(result_file_path, "r", encoding="utf-8") as f:
-                result_data = f.read()
-            if result_data.strip():
-                print(f"[RESULT] Script output via $SLICER_RESULT_FILE:")
-                print(result_data)
-            os.remove(result_file_path)
-        except Exception as e:
-            print(f"[WARN] Could not read $SLICER_RESULT_FILE: {e}", file=sys.stderr)
 
     return exit_code
 
@@ -294,9 +363,9 @@ def run_pythonslicer(script_path, pslicer_exe, timeout):
     elapsed = time.time() - start
 
     if proc.stdout:
-        print(proc.stdout)
+        safe_print(proc.stdout)
     if proc.stderr:
-        print(proc.stderr, file=sys.stderr)
+        safe_print(proc.stderr, file=sys.stderr)
 
     exit_code = proc.returncode
     print(f"\n[INFO] Execution finished in {elapsed:.1f}s. Exit code: {exit_code}")
@@ -527,9 +596,9 @@ def main():
     )
     parser.add_argument(
         "--kill-existing",
-        action="store_true",
-        default=False,
-        help="Kill running Slicer processes before starting a new one",
+        action=argparse.BooleanOptionalAction,
+        default=None,  # None = auto: True for --mode run, False for --mode launch
+        help="Kill running Slicer processes before starting (default: auto — yes for --mode run, no for --mode launch)",
     )
     args = parser.parse_args()
 
@@ -538,6 +607,9 @@ def main():
         _print_version()
 
     # ── Kill existing Slicer if requested ──
+    # Default: auto-kill for --mode run, no-kill for --mode launch
+    if args.kill_existing is None:
+        args.kill_existing = (args.mode == "run")
     if args.kill_existing:
         print("[INFO] --kill-existing: terminating running Slicer processes...")
         _kill_slicer()
