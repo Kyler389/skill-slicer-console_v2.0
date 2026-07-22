@@ -110,6 +110,8 @@ flowchart TB
 ```
 
 > 💡 **Growth Module** (Steps 0, 0b, 2.5): The skill automatically stores every successful script in the **Script Registry** and every debugging session in the **Error Collection** (错题集). Before each new task, it retrieves relevant knowledge — first checking for past errors, then searching for reusable scripts — making the system smarter with every use.
+>
+> 📓 **Obsidian users**: Open `Workflow.canvas` in the vault for an interactive flowchart; use `Growth Module.base` for a table-view dashboard of all records.
 
 ---
 
