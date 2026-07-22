@@ -2,9 +2,114 @@
 
 **slicer-console** is a command-line tool that executes Python scripts inside **3D Slicer** from the terminal — no GUI clicks required.
 
-It provides a unified runner with three execution backends, cross-platform auto-detection, structured output capture, and ready-to-use templates for segmentation, inference, and data I/O. Any AI coding agent that can run shell commands can leverage it.
+It provides a unified runner with three execution backends, cross-platform auto-detection, structured output capture, ready-to-use templates for segmentation, inference, and data I/O, and a built-in **Growth Module** that learns from every task.
 
 ![slicer-console mindmap overview](references/slicer-console-mindmap.png)
+
+---
+
+## Complete Workflow
+
+The skill follows a structured, case-based workflow. The **Growth Module** (Steps 0 → 0b → 2.5) makes it smarter with every use by recording successes and failures for future retrieval.
+
+```mermaid
+flowchart TB
+    subgraph PRE[Preparation]
+        direction TB
+        S0["<b>Step 0: Storage Detection</b>
+        🔍 Check for Obsidian vault"]
+        S0_CHOICE{"Vault available?"}
+        S0_VAULT["📓 Store in Obsidian vault
+        $OBSIDIAN_VAULT_PATH/..."]
+        S0_LOCAL["💾 Store in local files
+        ~/.claude/projects/.../growth/"]
+        S0 --> S0_CHOICE
+        S0_CHOICE -->|Yes| S0_VAULT
+        S0_CHOICE -->|No| S0_LOCAL
+    end
+
+    subgraph SELECT[Step 0a: Method Selection]
+        S0A["⚙️ Choose backend:
+        direct | pythonslicer | jupyter"]
+    end
+
+    subgraph RETRIEVE[Step 0b: Knowledge Retrieval]
+        SEARCH_ERROR["🔎 Search Error Collection
+        for similar past mistakes"]
+        ERROR_FOUND{"Found?"}
+        APPLY_FIX["📝 Apply recommended fix
+        [成长] 发现类似历史错误"]
+        SEARCH_SCRIPT["🔎 Search Script Registry
+        for successful precedents"]
+        SCRIPT_FOUND{"Found?"}
+        REUSE["📋 Reuse/Adapt existing script
+        [成长] 发现类似历史脚本"]
+        FRESH["✨ Write fresh script"]
+        
+        SEARCH_ERROR --> ERROR_FOUND
+        ERROR_FOUND -->|Yes, unresolved| APPLY_FIX
+        ERROR_FOUND -->|No| SEARCH_SCRIPT
+        APPLY_FIX --> SEARCH_SCRIPT
+        SEARCH_SCRIPT --> SCRIPT_FOUND
+        SCRIPT_FOUND -->|Yes| REUSE
+        SCRIPT_FOUND -->|No| FRESH
+    end
+
+    subgraph EXECUTE[Step 1: Execute]
+        WRITE["✍️ Write Python script
+        → .slicer_temp/task_&lt;timestamp&gt;.py"]
+        RUN["▶️ Run via runner
+        run_slicer_script.py --mode run"]
+        OUTPUT["📊 Return output
+        + SLICER_RESULT_FILE"]
+        WRITE --> RUN --> OUTPUT
+    end
+
+    subgraph REGISTER[Step 2.5: Knowledge Registration]
+        DECIDE{"Script successful?"}
+        SUCCESS["✅ Script Registry
+        → Record script + INDEX.md
+        → Copy to templates/ if reusable"]
+        FAILURE["❌ Error Collection
+        → Log error + root cause
+        → Archive script to .slicer_temp/errors/"]
+        
+        DECIDE -->|exit 0 + expected| SUCCESS
+        DECIDE -->|error / needs debug| FAILURE
+    end
+
+    subgraph CLEANUP[Step 2.6: Cleanup]
+        DELAYED["⏳ Delayed delete
+        .slicer_temp/task_*.py
+        (keep errors/ copy)"]
+    end
+
+    subgraph FEEDBACK[User Feedback]
+        PAUSE["⏸️ Pause for user feedback"]
+        DONE{"Task complete?"}
+        FIX{"Needs debug?"}
+        NEXT_TASK["➡️ Continue to next task
+        → Start from Step 0"]
+        REWORK["🔄 Modify & re-run
+        → Go to Step 1"]
+        END_SESSION["✅ End session"]
+        
+        PAUSE --> DONE
+        DONE -->|Yes| NEXT_TASK
+        DONE -->|No| FIX
+        FIX -->|Can fix| REWORK
+        FIX -->|Need user input| END_SESSION
+    end
+
+    PRE --> SELECT --> RETRIEVE
+    RETRIEVE --> EXECUTE --> OUTPUT
+    OUTPUT --> REGISTER --> CLEANUP
+    CLEANUP --> FEEDBACK
+    REWORK --> EXECUTE
+    NEXT_TASK -.->|New invocation| PRE
+```
+
+> 💡 **Growth Module** (Steps 0, 0b, 2.5): The skill automatically stores every successful script in the **Script Registry** and every debugging session in the **Error Collection** (错题集). Before each new task, it retrieves relevant knowledge — first checking for past errors, then searching for reusable scripts — making the system smarter with every use.
 
 ---
 

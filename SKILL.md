@@ -35,8 +35,10 @@ The runner script auto-detects which method to use:
 | 阶段 | 操作 | 说明 |
 |------|------|------|
 | **首次** | `--mode launch` 启动 Slicer 并保持打开 | Slicer GUI 启动后保持运行 |
-| **后续** | 利用**同一 Slicer 实例**的 Python Console 执行脚本 | 避免重复启动开销 |
-| **收尾** | 执行完毕清理临时脚本（除非可复用） | 见下方清理规则 |
+| **检索** | 执行前检索 Error Collection + Script Registry（Step 0.5） | 避免重复错误，复用成功经验 |
+| **执行** | 编写脚本 → 运行脚本 | 利用**同一 Slicer 实例**的 Python Console 执行 |
+| **注册** | 执行后注册结果到 Script Registry / Error Collection（Step 2.5） | 成功记录复用，失败记入错题集 |
+| **收尾** | 先注册 → 再清理临时脚本（除非可复用） | 见下方清理规则 |
 
 ### 2. Python Console 执行方式
 
@@ -49,15 +51,23 @@ The runner script auto-detects which method to use:
 
 ### 3. 临时脚本清理规则
 
-所有写入 `.slicer_temp/` 的脚本**执行完毕后延迟清理**，避免占用用户交互通道：
+所有写入 `.slicer_temp/` 的脚本**执行注册后延迟清理**，避免占用用户交互通道：
+
+| 阶段 | 操作 | 说明 |
+|------|------|------|
+| **0.5 (执行前)** | **检索** Error Collection + Script Registry | 避免重复错误，复用成功经验 |
+| **1–2** | **编写 → 运行** 脚本 | 标准执行流程 |
+| **2.5 (执行后)** | **注册** 结果 | 成功 → Script Registry；失败 → Error Collection |
+| **3 (清理)** | **延迟清理** 临时脚本 | 见下方条件表 |
 
 | 条件 | 处理方式 |
 |------|----------|
-| 一次性任务（计算/转换/查询） | 执行后告知用户"已完成"，**设 300s 延迟删除** `.slicer_temp/task_*.py` |
-| 可复用模板（通用流程/工具函数） | **迁移**到 `scripts/templates/` 并命名意义明确 |
+| 一次性任务（计算/转换/查询） | 执行后告知用户"已完成"，**先注册 → 再设 300s 延迟删除** `.slicer_temp/task_*.py` |
+| 成功 + 可复用模板 | **注册到 Script Registry** + **迁移**到 `scripts/templates/` |
+| 失败/调试中 | **注册到 Error Collection** + 保留 `.slicer_temp/errors/` 副本 |
 | 用户明确要求保留 | 保留并告知用户路径 |
 
-> 原则：**跑完脚本 → 告知用户完成 → 设延迟清理 → 暂停等反馈**。不占用通道做额外操作。
+> 原则：**跑完脚本 → 告知用户完成 → 注册（成功/失败）→ 设延迟清理 → 暂停等反馈**。不占用通道做额外操作。
 
 清理命令示例：
 ```bash
@@ -119,7 +129,49 @@ task_output(...)  # 查看进度文件内容
 
 ## Action
 
-### 0. Method Selection (First-Time Only)
+### 0. 存储检测（Storage Detection）
+
+**自动检测用户是否有知识库（知识库默认 Obsidian vault），没有则回退到本地文件存储。**
+
+执行任何操作之前，先确定成长模块的存储后端：
+
+```bash
+# Step 1: 检查是否有 Obsidian vault
+VAULT_PATH="${OBSIDIAN_VAULT_PATH:-}"
+if [ -z "$VAULT_PATH" ]; then
+  # OBSIDIAN_VAULT_PATH 未设置，尝试通过 obmem 检测
+  OBMEM_VAULT=$(obmem show-vault 2>/dev/null) && VAULT_PATH="$OBMEM_VAULT"
+fi
+
+# Step 2: 根据检测结果设置 GROWTH_BASE
+if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH" ]; then
+  GROWTH_BASE="$VAULT_PATH/Project Memory/slicer-console"
+  echo "[成长] 存储后端: Obsidian vault ($GROWTH_BASE)"
+else
+  GROWTH_BASE="$HOME/.claude/projects/slicer-console-skill/growth"
+  mkdir -p "$GROWTH_BASE/Script Registry" "$GROWTH_BASE/Error Collection"
+  echo "[成长] 存储后端: 本地文件 ($GROWTH_BASE)"
+  echo "[提示] 如需启用 Obsidian 知识库，请设置环境变量 OBSIDIAN_VAULT_PATH 或安装 obmem"
+fi
+```
+
+> **$GROWTH_BASE** 是成长模块的根目录，以下所有检索和注册操作均以此为基准。
+> - 有 Obsidian vault → `$OBSIDIAN_VAULT_PATH/Project Memory/slicer-console/`
+> - 无 vault → `~/.claude/projects/slicer-console-skill/growth/`
+
+#### 目录结构（自动创建）
+
+```
+$GROWTH_BASE/
+├── Script Registry/       # 成功脚本索引
+│   ├── INDEX.md           # 标签索引
+│   └── {date}-{slug}.md   # 单条脚本记录
+└── Error Collection/      # 错题集
+    ├── INDEX.md           # 标签索引
+    └── {date}-{slug}.md   # 单条错误记录
+```
+
+### 0a. Method Selection (First-Time Only)
 
 Before executing any script, check the saved configuration:
 
@@ -139,6 +191,56 @@ Before executing any script, check the saved configuration:
    ```
 
    The user can override their saved choice at any time with `--method <name>`.
+
+### 0b. 知识检索（Retrieve）
+
+Before writing any new script, check existing knowledge for precedents.
+**搜索方式根据存储后端自动切换**：
+
+```bash
+# 统一检索脚本
+SEARCH_GROWTH() {
+  local query="$1"
+  local registry="$2"  # "Script Registry" 或 "Error Collection"
+  local base="$GROWTH_BASE"
+
+  if command -v obmem &>/dev/null && [ -n "$OBSIDIAN_VAULT_PATH" ]; then
+    # Obsidian vault 后端：使用 obmem 语义搜索
+    obmem search --project "slicer-console" --query "$query" 2>/dev/null \
+      | grep -i "$registry" || true
+  else
+    # 本地文件后端：直接 grep 标题和标签
+    grep -ril --include="*.md" \
+      -e "$query" \
+      "$base/$registry/" 2>/dev/null || true
+  fi
+}
+```
+
+1. **Search Error Collection** first — check for similar past mistakes:
+   ```bash
+   ERROR_HITS=$(SEARCH_GROWTH "<task_keywords>" "Error Collection")
+   ```
+   - If hits found: **read the best-matching entry** for root cause and fix.
+   - Apply the fix before proceeding.
+   - Log: `[成长] 发现类似历史错误: <entry_path> — 已应用推荐修复`
+   - If unresolved error (frontmatter `resolved: false`), **skip** Script Registry search.
+
+2. **Search Script Registry** (skip if unresolved error found above):
+   ```bash
+   SCRIPT_HITS=$(SEARCH_GROWTH "<task_keywords>" "Script Registry")
+   ```
+   - If hits found: **read the most relevant entry**.
+     - Direct match → copy script to `.slicer_temp/` and reuse with minor tweaks.
+     - Partial match → use as template, extend for current task.
+   - Log: `[成长] 发现类似历史脚本: <entry_path> — 已复用/参考`
+
+3. **If no matches**: proceed fresh — the result will become a new entry after execution.
+
+> **关键词提取**：从用户请求中提取 2–4 个核心技术名词（如 `"segmentation"`、`"NIfTI"`），
+> 用空格分隔。本地文件后端使用大小写不敏感的 grep 匹配。
+
+---
 
 ### 1. Write Script
 
@@ -166,7 +268,139 @@ Before executing any script, check the saved configuration:
    - `--no-kill-existing` — 跳过杀掉已有 Slicer 进程
 4. **Return the output** to the user and report the script path.
    - 如果 runner 输出被截断，优先展示 `SLICER_RESULT_FILE` 的结构化结果（如果有）。
-   - **执行完毕后**：告知用户结果 → 设 300s 延迟清理临时脚本 → **暂停等用户反馈**。不要继续做额外操作（检查、轮询、清理等）。
+   - 告知用户执行结果和脚本路径，然后进入 **Step 2.5** 进行知识注册。
+   - **不要立即清理脚本** — 先注册，再清理。
+
+### 2.5. 知识记录（Register）
+
+After returning results, record the outcome before cleaning up the temp script.
+Determine success vs. failure from the script exit code AND user feedback:
+
+> **判断标准**：
+> - `exit code 0` + 输出符合预期 = **成功** → Script Registry
+> - `exit code != 0` 或输出含错误 / 用户表示需要修改 = **失败/调试中** → Error Collection
+
+#### ✅ If Task Succeeded
+
+1. **Create Script Registry entry** at `$GROWTH_BASE/Script Registry/<YYYY-MM-DD>-<slug>.md`:
+   ```bash
+   mkdir -p "$GROWTH_BASE/Script Registry"
+   cat > "$GROWTH_BASE/Script Registry/$(date +%F)-<slug>.md" << REGEOF
+   ---
+   type: "script-registry"
+   project: "slicer-console"
+   created: "$(date -Iseconds)"
+   tags: ["slicer-console", "script", "<task_type>", "<api_keywords>"]
+   title: "<brief description>"
+   task_type: "<type>"
+   slicer_method: "<direct|pythonslicer|jupyter>"
+   duration_sec: <seconds>
+   exit_code: 0
+   ---
+
+   ## Task
+   <description>
+
+   ## Key APIs Used
+   - <api_list>
+
+   ## Script Summary
+   \`\`\`python
+   <extracted core logic>
+   \`\`\`
+
+   ## Notes
+   - <useful_details>
+   REGEOF
+   ```
+
+   > **Obsidian vault 后端**：自动生成的文件会被 Obsidian 识别并建立双向链接。
+   > **本地文件后端**：文件存储在 `$GROWTH_BASE/Script Registry/`，通过 grep 检索。
+
+2. **Copy the script** to `scripts/templates/` if it's reusable as a pattern:
+   ```bash
+   cp ./.slicer_temp/task_<timestamp>.py ./scripts/templates/<meaningful_name>.py
+   ```
+
+3. **Update INDEX.md** — append a row to the tag table in `$GROWTH_BASE/Script Registry/INDEX.md`:
+   ```bash
+   echo "| <task_type> | [[$(date +%F)-<slug>]] |" >> "$GROWTH_BASE/Script Registry/INDEX.md"
+   ```
+
+4. **Log**: `[成长] ✅ 已注册脚本到 Script Registry: <title>`
+
+#### ❌ If Task Failed or Required Debugging
+
+1. **Create Error Collection entry** at `$GROWTH_BASE/Error Collection/<YYYY-MM-DD>-<slug>.md`:
+   ```bash
+   mkdir -p "$GROWTH_BASE/Error Collection"
+   cat > "$GROWTH_BASE/Error Collection/$(date +%F)-<slug>.md" << ERREOF
+   ---
+   type: "error-collection"
+   project: "slicer-console"
+   created: "$(date -Iseconds)"
+   tags: ["slicer-console", "error", "<error_category>", "<task_type>"]
+   title: "<error description>"
+   task_type: "<type>"
+   slicer_method: "<direct|pythonslicer|jupyter>"
+   error_category: "<timeout|api-error|script-error|import-error|other>"
+   severity: "<low|medium|high>"
+   resolved: false
+   ---
+
+   ## What Was Attempted
+   <what the script intended to do>
+
+   ## Error
+   <error message / traceback>
+
+   ## Root Cause
+   <analysis of what went wrong>
+
+   ## Resolution Attempted
+   <what was tried to fix>
+
+   ## Recommended Fix
+   <actionable steps for next time>
+
+   ## Related Errors
+   - <wikilinks or paths to similar Error Collection entries>
+   ERREOF
+   ```
+
+2. **Archive the failed script** for later reference:
+   ```bash
+   mkdir -p .slicer_temp/errors
+   cp ./.slicer_temp/task_<timestamp>.py ./.slicer_temp/errors/<timestamp>_<slug>.py
+   ```
+
+3. **Update Error Collection INDEX.md**:
+   ```bash
+   echo "| <error_category> | [[$(date +%F)-<slug>]] — <title> |" >> "$GROWTH_BASE/Error Collection/INDEX.md"
+   ```
+
+4. **Log**: `[成长] ❌ 已记录错误到 Error Collection: <title>`
+
+#### 🔁 What Happens Next
+
+| Outcome | Next Step |
+|---------|-----------|
+| **Success** → Script Registry ✅ | 设延迟清理 → **暂停等用户反馈** |
+| **Failed + can fix quickly** | 修改脚本 → 回到 Step 1 重新运行 |
+| **Failed + needs user input** | 设延迟清理 → **暂停等用户反馈**（保留脚本供后续修复） |
+
+### 2.6. 清理（Cleanup）
+
+After registration:
+
+- **成功脚本**：设 300s 延迟删除 `.slicer_temp/task_<timestamp>.py`
+- **失败脚本**：`.slicer_temp/task_<timestamp>.py` 延迟删除，但保留 `.slicer_temp/errors/` 中的副本
+- **可复用脚本**：已迁移到 `scripts/templates/` 的副本不予删除
+- **用户要求保留**：保留并告知路径
+
+**无论成功还是失败**，完成后都必须暂停等待用户反馈：
+
+> **告知用户结果 → 注册 → 清理 → **暂停等用户反馈****。不要继续做额外操作（检查、轮询、清理等）。
 
 ### Examples
 
@@ -350,6 +584,10 @@ The runner script runs in your external Python (not Slicer's Python). It needs:
 | `--additional-module-paths` has no effect on Linux | AppImage is read-only filesystem | Extract AppImage first: `./Slicer*.AppImage --appimage-extract && ./squashfs-root/AppRun` |
 | `AttributeError` on slicer API | Using C++ method that moved | Fall back to `slicer.modules.*.logic()` or `slicer.util.*` |
 | `QWidget.layout` call crashes | Layout accessed as method not property | Use `self._layout` member variable instead |
+
+> 💡 **首次遇到新错误？** 如果是新的错误模式，执行完毕后它会自动被记录到 **Error Collection（错题集）**。
+> 下次检索时系统会自动匹配，避免重蹈覆辙。也可以通过索引手动查阅：
+> `$GROWTH_BASE/Error Collection/INDEX.md`
 
 ## Diagnostics
 
